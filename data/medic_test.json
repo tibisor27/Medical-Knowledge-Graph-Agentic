@@ -1,0 +1,189 @@
+[
+    {
+        "medicament": "Abacavir",
+        "us_brand_names": [
+            "Ziagen®"
+        ],
+        "canadian_brand_names": [],
+        "synonyms": [],
+        "pharmacologic_class": [
+            "Antiretroviral Agent, Reverse Transcriptase Inhibitor (Nucleoside)",
+            "Reverse Transcriptase Inhibitor"
+        ],
+        "nutrients_depleted": [],
+        "studies": []
+    },
+    {
+        "medicament": "Abacavir, Lamivudine, and Zidovudine",
+        "us_brand_names": [
+            "Trizivir™"
+        ],
+        "canadian_brand_names": [],
+        "synonyms": [
+            "Azidothymidine, Abacavir, and Lamivudine",
+            "AZT, Abacavir, and Lamivudine",
+            "Compound S, Abacavir, and Lamivudine",
+            "Lamivudine, Abacavir, and Zidovudine",
+            "3TC, Abacavir, and Zidovudine",
+            "ZDV, Abacavir, and Lamivudine",
+            "Zidovudine, Abacavir, and Lamivudine"
+        ],
+        "pharmacologic_class": [
+            "Antiretroviral Agent, Reverse Transcriptase Inhibitor (Non-Nucleoside)",
+            "Antiretroviral Agent, Reverse Transcriptase Inhibitor (Nucleoside)"
+        ],
+        "nutrients_depleted": [
+            {
+                "nutrient": "Carnitine",
+                "potential_risks": "Carnitine deficiencies are rare because the body produces carnitine relatively easily. Symptoms include elevated blood lipids, abnormal liver function, muscle weakness, reduced energy, and impaired glucose control."
+            },
+            {
+                "nutrient": "Copper",
+                "potential_risks": "Severe copper deficiency is rare, but marginal copper deficiency is common since the diet of most Americans only supplies about 50% of the RDA. Symptoms of copper deficiency include loss of color in the hair and skin (due to decreased synthesis of melanin), anemia, fatigue, kinky hair, low body temperature, breakdown of connective tissue, various cardiovascular problems, nervous system disorders, and reduced resistance to infection.\n\nZinc interferes with copper absorption. High intake of zinc supplements can lead to copper deficiency.\n\nMenkes' disease, also called kinky or steely hair syndrome, is a genetic defect in copper absorption characterized by stunted growth, abnormalities in cardiovascular and skeletal development, progressive cognitive decline, and premature death.\n\nSome researchers have shown that copper deficiency is associated with elevated cholesterol and triglycerides, and the development of atherosclerosis. Thus, copper deficiency may play a role in the risk of cardiovascular disease. Copper deficiency has also been associated with emphysema."
+            },
+            {
+                "nutrient": "Vitamin B12",
+                "potential_risks": "Vitamin B12 deficiencies manifest primarily as anemia and neurologic changes. Vitamin B12 deficiency inhibits DNA synthesis, which affects the growth and repair of all cells. The symptoms of vitamin B12 deficiency include:\n- Fatigue\n- Peripheral neuropathy\n- Tongue and mouth irregularities\n- Depression, confusion and memory loss (especially in the elderly)\n- Macrocytic anemia (abnormally enlarged red blood cells)\n- Poor blood clotting and easy bruising\n- Dermatitis and skin sensitivity\n- Loss of appetite\n- Nausea\n- Vomiting\n\nAnemia is the first symptom of vitamin B12 deficiency. Pernicious anemia results from either inadequate vitamin B12 intake or reduced gastric secretion of intrinsic factor, which inhibits absorption.\n\nThe elderly are most susceptible to vitamin B12 deficiency due to atrophy of gastric parietal cells causing inadequate production of intrinsic factor. Deficiencies in the elderly often cause varying degrees of neuropsychiatric symptoms such as moodiness, confusion, abnormal gait, memory loss, agitation, delusions, dizziness, dementia, and hallucinations.\n\nMeatless diets are deficient in vitamin B12. Strict vegetarians are urged to use a vitamin B12 supplement.\n\nNumerous drugs inhibit vitamin B12 absorption and, when taken chronically, can lead to nutrient depletion. These include oral contraceptives, potassium medications, histamine-2 blockers (Axid®, Pepcid®, Tagamet®, Zantac®), proton pump inhibitors (Prevacid®, Prilose™), and phenytoin (Dilantin®)."
+            },
+            {
+                "nutrient": "Zinc",
+                "potential_risks": "Marginal zinc deficiencies are thought to be quite common in the United States. Because of its extensive range of biological activities, zinc deficiency can cause a wide range of deficiency symptoms. The symptoms of zinc deficiency include acne; impaired sense of smell and taste; delayed wound healing; anorexia; decreased immunity; frequent infections; depression; photophobia; night blindness; problems with skin, hair, and nails; menstrual problems; joint pain; and involuntary cyclical movements of the eyeball (nystagmus).\n\nZinc deficiency conditions were first reported in the 1960s in growing children and adolescent males from Egypt, Iran, and Turkey. Diets low in animal protein and high in phytate-containing grains produced symptoms of dwarfism, hypogonadism, and failure to mature sexually.\n\nPregnant women have greater zinc needs. Deficiency can cause impaired fetal development, low birth weight infants, and birth defects. Stretch marks during pregnancy are also partially due to zinc deficiency.\n\nZinc deficiency can be caused by inadequate dietary intake due to foods grown on zinc-depleted soils. Food processing also removes zinc, so fast foods and processed foods are also zinc depleted. Protein and/or calorie-restricted diets can also lead to zinc deficiency.\n\n- Zinc depletion is frequently seen in the following medical conditions: alcoholism, macular degeneration, diabetes, malignant melanoma, liver and kidney diseases, malabsorption syndromes such as celiac sprue, and inflammatory bowel diseases such as Crohn's disease."
+            }
+        ],
+        "studies": [
+            {
+                "study_no": "259",
+                "study_title": "Foscarnet & Calcium Depletion",
+                "content": "Foscarnet administration to a hemodialysis patient over a 14-week period resulted in a decrease in both serum calcium and phosphorus levels. Neither had an effect on response to therapy.",
+                "source": "MacGregor RR, Graziani AL, Weiss R, et al, \"Successful Foscarnet Therapy for Cytomegalovirus Retinitis in an AIDS Patient Undergoing Hemodialysis: Rationale for Empiric Dosing and Plasma Level Monitoring,\" J Infect Dis, 1991, 164(4):785-7."
+            },
+            {
+                "study_no": "260",
+                "study_title": "Zidovudine & Vitamin B12 Depletion",
+                "content": "In an outpatient referral clinic, 200 HIV infected patients were evaluated to determine the prevalence of subnormal cobalamin levels. In addition, the relationship to immunosuppression by the virus and/or antiviral treatment was evaluated. In 61 patients, subnormal serum B12 levels were found. The patients who were deficient in B12 were more likely to be receiving zidovudine treatment. In addition, evidence of B12 malabsorption is found among those with more advanced disease and gastrointestinal symptoms.",
+                "source": "Paltiel O, Falutz J, Veilleux M, et al, \"Clinical Correlates of Subnormal Vitamin B12 Levels in Patients Infected With the Human Immunodeficiency Virus,\" Am J Hematol, 1995, 49(4):318-22."
+            },
+            {
+                "study_no": "261",
+                "study_title": "Zidovudine & Carnitine Depletion",
+                "content": "The degree of neutral fat accumulation and muscle carnitine levels was analyzed from muscle biopsy specimens of 21 patients with AZT-induced myopathy. Based on the analysis, the authors concluded that the impairment of mitochondrial function in muscle, which may be caused by AZT, results in several pathologic changes. These include the accumulation of lipid secondary to decreased utilization of long-chain fatty acids, reduction of muscle carnitine levels, and depletion of muscle fiber energy stores. The authors note these observations may have potential therapeutic implications regarding the use of oral carnitine supplementation in the treatment of AZTinduced myopathy.",
+                "source": "Dalakas MC and Leon-Monzon ME, \"Zidovudine-Induced Mitochondrial Myopathy is Associated With Muscle Carnitine Deticiency and Lipid Storage,\" Ann Neurol, 1994, 35(4): 482-7."
+            }
+        ]
+    },
+    {
+        "medicament": "Acarbose",
+        "us_brand_names": [
+            "Precose®"
+        ],
+        "canadian_brand_names": [],
+        "synonyms": [],
+        "pharmacologic_class": [
+            "Antidiabetic Agent (Miscellaneous)"
+        ],
+        "nutrients_depleted": [],
+        "studies": []
+    },
+    {
+        "medicament": "Acebutolol",
+        "us_brand_names": [
+            "Sectral®"
+        ],
+        "canadian_brand_names": [
+            "Monitan®",
+            "Rhotral"
+        ],
+        "synonyms": [
+            "Acebutoloi Hydrochloride"
+        ],
+        "pharmacologic_class": [
+            "Antiarrhythmic Agent, Class II",
+            "Beta Blocker (with Intrinsic Sympathomimetic Activity)"
+        ],
+        "nutrients_depleted": [
+            {
+                "nutrient": "Coenzyme Q10",
+                "potential_risks": "High blood pressure, congestive heart failure, low energy"
+            }
+        ],
+        "studies": [
+            {
+                "study_no": "348",
+                "study_title": "Beta-Blockers & Coenzyme Q10 Depletion",
+                "content": "Eight antihypertensive drugs were tested for inhibition of two mitochondrial coenzyme Q10-enzymes of heart tissue, succinoxidase, and NADH-oxidase. These enzymes are important to the bioenergetics of cardiac function. Diazoxide and propranolol significantly inhibited both enzymes. Metoprolol did not inhibit succinoxidase, and was one-fourth as active as propranolol for inhibition of NADH-oxidase. Hydrochlorothiazide, hydralazine, and clonidine also inhibited CoQ10-NADH-oxidase. Reserpine did not inhibit either CoQ10-enzyme, and methyldopa was a very weak inhibitor of succinoxidase. The authors conclude that some clinical side-effects of propranolol may be due, in part, to inhibition of CoQ10-enzymes. In particular, pre-existing deficiencies of coenzyme Q10 in the myocardium of hypertensive patients could be exacerbated by treatment with propranolol.",
+                "source": "Kishi H, Kishi T, and Folkers K, \"Bioenergetics in Clinical Medicine. III. Inhibition of Coenzyme Q10-Enzymes by Clinically Used Antihypertensive Drugs,\" Res Commun Chem Pathol Pharmacol, 1975, 12(3):533-40."
+            },
+            {
+                "study_no": "349",
+                "study_title": "Beta-Blockers & Coenzyme Q10 Depletion",
+                "content": "A number of beta-blockers were evaluated for their effect on myocardial CoQ10 enzymes. It was noted that myocardial depression could be related to these bioenergetic enzymes. Propranolol was noted to have the greatest effect, while metoprolol was less inhibitory against myocardial CoQ10 enzymes. Timolol was noted to have negligible effects on these enzymes, and was proposed to be a preferred agent due to this property.",
+                "source": "Kishi T, Watanabe T, Folkers K, \"Bioenergetics in Clinical Medicine XV. Inhibition of Coenzyme Q10-Enzymes by Clinically Used Adrenergic Blockers of Beta-Receptors,\" Res Commun Chem Pathol Pharmacol, 1977, 17(1): 157-64."
+            }
+        ]
+    },
+    {
+        "medicament": "Acetaminophen",
+        "us_brand_names": [
+            "Acephen® [OTC]",
+            "Aceta® [OTC]",
+            "Apacet® [OTC]",
+            "Aspirin Free Anacin® Maximum Strength [OTC)",
+            "Children's Dynafed® Jr [OTC]",
+            "Children's Silapap® [OTC]",
+            "Extra Strength Dynafed® E.X. [OTC]",
+            "Feverall™ [OTC]",
+            "Feverall™ Sprinkle Caps [OTC]",
+            "Genapap® [OTC)",
+            "Haleno|® Children's [OTC]",
+            "Infants Feverali™ [OTC]",
+            "Infants' Silapap® [OTC]",
+            "Junior Strength Panado® [OTC]",
+            "Liquiprin® [OTC]",
+            "Mapap® [OTC)",
+            "Maranox® [OTC)",
+            "Neopap® [OTC]",
+            "Panadol® [OTC)",
+            "Redutemp\" [OTC]",
+            "Rideno|® [OTC]",
+            "Tempra\" [OTC]",
+            "Tylenol® [OTC)",
+            "Tylenol® Extended Relief [OTC]",
+            "Uni-Ace® [OTC)"
+        ],
+        "canadian_brand_names": [
+            "Abenol®",
+            "A.F. Anacin®",
+            "Atasol®",
+            "Pediatrix",
+            "Tantaphen®"
+        ],
+        "synonyms": [
+            "APAP",
+            "N-Acetyl-P-Aminophenol",
+            "Paracetamol"
+        ],
+        "pharmacologic_class": [
+            "Analgesic, Miscellaneous"
+        ],
+        "nutrients_depleted": [
+            {
+                "nutrient": "Glutathione",
+                "potential_risks": "Decreased hepatic detoxification, decreased immunity"
+            }
+        ],
+        "studies": [
+            {
+                "study_no": "517",
+                "study_title": "Acetaminophen & Glutathione Depletion",
+                "content": "In an effort to study hepatic damage from acetaminophen overdose, hepatic glutathione concentrations (total and oxidized) were measured in mice at 15, 30, and 60 minutes following a single dose of acetaminophen (375 mg/kg). Total glutathione was decreased at every time point. Hepatocyte damage was observed, with severe lesions and necrosis after 60 minutes. The authors cite oxidative stress as a possible mechanism for acetaminophen-induced hepatotoxicity.",
+                "source": "Lores Arnaiz S, Llesuy S, Cutrin JC, et al, \"Oxidative Stress by Acute Acetaminophen Administration in Mouse Liver,\" Free Radic Biol Med, 1995, 19(3):303-10."
+            },
+            {
+                "study_no": "518",
+                "study_title": "Acetaminophen & Glutathione Depletion",
+                "content": "Since glutathione deficiency is a general property of aging tissues, including the kidney, senescent organisms have been hypothesized to be at greater risk of acetaminophen-induced renal damage. Mice at a range of ages through the life span were injected with a variety of acetaminophen dosages. The extent of glutathione and cysteine depletion was determined. In the controls, concentrations decreased about 30% in the aging mouse. Acetaminophen depleted the renal glutathione and cysteine in a dose- and time-dependent manner. The extent of depletion in old (31-month mice was greater, and the recovery was less efficient. The authors noted that a glutathione and cysteine deficiency occurs in the mouse kidney with acetaminophen administration, which was accompanied by an impaired detoxification capacity.",
+                "source": "Richie JP Jr, Lang CA, and Chen TS, \"Acetaminophen-Induced Depletion of Glutathione and Cysteine in the Aging Mouse Kidney,\" Biochem Pharmacol, 1992, 44(1): 129-35."
+            }
+        ]
+    }
+]
