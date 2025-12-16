@@ -149,7 +149,7 @@ def get_llm():
         api_key=AZURE_OPENAI_API_KEY,
         api_version=OPENAI_API_VERSION,
         azure_deployment='gpt-4.1-mini',
-        temperature=0.0,  # More deterministic for extraction
+        temperature=0.0 # More deterministic for extraction
     )
 
 
