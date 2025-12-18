@@ -26,7 +26,12 @@ from src.config import (
     validate_config
 )
 from src.agent.state import print_state_debug
-from src.prompts import SYSTEM_INSTRUCTIONS, GRAPH_SCHEMA, CYPHER_EXAMPLES
+from src.prompts import (
+    CYPHER_SYSTEM_PROMPT as SYSTEM_PROMPT, 
+    GRAPH_SCHEMA, 
+    CYPHER_EXAMPLES, 
+    CYPHER_USER_PROMPT as USER_PROMPT_TEMPLATE
+)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CYPHER VALIDATION
@@ -132,25 +137,37 @@ def cypher_generator_node(state: MedicalAgentState) -> Dict[str, Any]:
     analysis_object = state['conversation_analysis']
     intent = analysis_object.detected_intent if analysis_object else "GENERAL_MEDICAL"
 
-    resolved_entities = state.get('resolved_entities')
-    unresolved_entities = state.get('unresolved_entities') if state.get('unresolved_entities') else []
+    resolved_entities = state.get('resolved_entities', [])
+    unresolved_entities = state.get('unresolved_entities', [])
     user_message = state.get('user_message')
-
-    print_state_debug(state)
-    # Build the prompt
+    
+    # DEBUG: Print what we're working with
+    print(f"----> Intent: {intent}")
+    print(f"----> User message: {user_message}")
+    print(f"----> Resolved entities count: {len(resolved_entities) if resolved_entities else 0}")
+    if resolved_entities:
+        for i, e in enumerate(resolved_entities):
+            print(f"      Entity {i}: {e.resolved_name} ({e.node_type})")
+    else:
+        print("      ⚠️ NO RESOLVED ENTITIES!")
+    
+    # If no resolved entities, we can't generate a useful query
+    if not resolved_entities:
+        print("❌ ERROR: No resolved entities to query!")
+        return {
+            **state,
+            "generated_cypher": "",
+            "cypher_params": {},
+            "cypher_reasoning": "No entities were resolved from the graph",
+            "cypher_is_valid": False,
+            "cypher_errors": ["No resolved entities available"],
+            "execution_path": add_to_execution_path(state, "cypher_generator")
+        }
+    
+    # Build the prompt with optimized templates
     raw_prompt = ChatPromptTemplate.from_messages([ 
-            ("system", SYSTEM_INSTRUCTIONS),
-            ("human", """
-            Based on the schema and rules provided, generate a Cypher query for the following request:
-                === USER INTENT ===
-                {intent}
-
-                === RESOLVED ENTITIES ===
-                {resolved_entities}
-
-                === USER QUESTION ===
-                {query}
-                """)
+            ("system", SYSTEM_PROMPT),
+            ("human", USER_PROMPT_TEMPLATE)
     ])
 
     
@@ -158,7 +175,7 @@ def cypher_generator_node(state: MedicalAgentState) -> Dict[str, Any]:
         print(f"----> Generating Cypher...\n")
         # Generate Cypher with LLM
         llm = get_llm_5_1_chat()
-        print(f"----> LLM: {llm}\n")
+
         chain = raw_prompt | llm.with_structured_output(CypherGeneratorResponse, method="function_calling")
 
         result = chain.invoke({
@@ -169,12 +186,33 @@ def cypher_generator_node(state: MedicalAgentState) -> Dict[str, Any]:
             "examples": CYPHER_EXAMPLES
         })
 
-        print(f"----> RESULT: {result}\n")
         cypher = result.cypher
         params = result.params
         reasoning = result.reasoning
         errors = result.error
 
+        if "$" in cypher and not params:
+            print("⚠️ WARNING: LLM forgot params! Attempting auto-fix based on entities...")
+
+            print(f"Cypher: {cypher}")
+            print(f"Tipul entitatii 0: {type(resolved_entities[0])}")
+            print(f"Entitatea 0: {resolved_entities[0]}")
+            print(f"Resolved name: {resolved_entities[0].resolved_name}")
+            
+            # Luăm prima entitate rezolvată (cea mai relevantă)
+            if resolved_entities and len(resolved_entities) > 0:
+                top_entity = resolved_entities[-1].resolved_name # sau 'original_text'
+                
+                # Harta simplă de injectare în funcție de ce variabilă lipsește
+                if "$symptom_name" in cypher:
+                    params = {"symptom_name": top_entity}
+                elif "$med_name" in cypher:
+                    params = {"med_name": top_entity}
+                elif "$nutrient_name" in cypher:
+                    params = {"nutrient_name": top_entity}
+                
+                print(f"AUTO-FIXED PARAMS: {params}")
+        
         print(f"----> GENERATED CYPHER: {cypher}\n")
         print(f"----> GENERATED PARAMS: {params}\n")
         print(f"----> GENERATED REASONING: {reasoning}\n")
@@ -183,6 +221,7 @@ def cypher_generator_node(state: MedicalAgentState) -> Dict[str, Any]:
         # Check for error in response
         if errors:
             return {
+                **state,
                 "generated_cypher": "",
                 "cypher_params": {},
                 "cypher_reasoning": reasoning,
@@ -195,6 +234,7 @@ def cypher_generator_node(state: MedicalAgentState) -> Dict[str, Any]:
         is_valid, validation_errors = validate_cypher(cypher)
         
         return {
+            **state,
             "generated_cypher": cypher,
             "cypher_reasoning": reasoning,
             "cypher_params": params,
@@ -206,6 +246,7 @@ def cypher_generator_node(state: MedicalAgentState) -> Dict[str, Any]:
         
     except json.JSONDecodeError as e:
         return {
+            **state,
             "generated_cypher": "",
             "cypher_params": {},
             "cypher_reasoning": "",
@@ -217,6 +258,7 @@ def cypher_generator_node(state: MedicalAgentState) -> Dict[str, Any]:
         
     except Exception as e:
         return {
+            **state,
             "generated_cypher": "",
             "cypher_params": {},
             "cypher_reasoning": "",

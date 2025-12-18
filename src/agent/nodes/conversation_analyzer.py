@@ -1,77 +1,54 @@
 """
-Conversation Analyzer Node.
-
 This node analyzes the full conversation context to:
 1. Understand what the user wants to know (intent detection)
 2. Accumulate information across multiple turns
 3. Decide if we have enough information to query the graph
 4. Generate clarification questions if needed
-
-Uses Pydantic structured output for reliable parsing.
 """
 
 from typing import Dict, Any
 from langchain_openai import AzureChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from src.agent.state import (
-    MedicalAgentState, 
-    ConversationAnalysis, 
-    VALID_INTENTS,
-    add_to_execution_path,
-    print_state_debug
-)
-from src.config import (
-    AZURE_OPENAI_ENDPOINT, 
-    AZURE_OPENAI_API_KEY, 
-    OPENAI_API_VERSION,
-    validate_config
-)
+from src.agent.state import MedicalAgentState, ConversationAnalysis, VALID_INTENTS, add_to_execution_path, print_state_debug, print_analysis_debug
+from src.config import AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, OPENAI_API_VERSION, validate_config
 from src.agent.nodes.entity_extractor import entity_extractor_node
 from src.agent.nodes.cypher_generator import cypher_generator_node
-from src.prompts import SYSTEM_PROMPT
+from src.agent.nodes.graph_executor import graph_executor_node
+from src.prompts import CONV_ANALYZER_SYSTEM_PROMPT as SYSTEM_PROMPT
+from src.agent.nodes.response_synthesizer import response_synthesizer_node
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # USER PROMPT TEMPLATE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-USER_PROMPT_TEMPLATE = """=== CONVERSATION HISTORY ===
-{conversation_history}
+USER_PROMPT_TEMPLATE = """
+=== PREVIOUS ANALYZED STATE (Reference) ===
+The previous analysis identified these entities:
+- Meds: {current_meds}
+- Symptoms: {current_symps}
+- Nutrients: {current_nuts}
 
-=== CURRENT USER MESSAGE ===
-{current_message}
+=== NEW USER QUERY ===
+{query}
 
-Analyze this conversation and provide your structured analysis."""
+=== CRITICAL INSTRUCTION FOR UPDATING ===
+You must reconcile the "Previous State" with the "Conversation History".
 
+1. **Rule of Truth**: The **Conversation History text** is the ultimate source of truth.
+2. **Handle Empty State**: If 'Medications' in Previous State is EMPTY (`[]`), but you see medications mentioned in the History text (e.g., in previous turns), **YOU MUST RE-EXTRACT THEM**. Do not assume they were deleted.
+3. **Merge Logic**:
+   - Start with entities from Previous State.
+   - ADD entities found in History that were missing from Previous State.
+   - ADD new entities from the New User Message.
+   - ONLY remove an entity if the user EXPLICITLY says "I stopped taking X".
+
+"""
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
-
-def format_conversation_for_analysis(messages: list) -> str:
-    """Format conversation history for the analyzer prompt."""
-    if not messages:
-        return "No previous conversation."
-    
-    formatted = []
-    # Exclude the last message (it's the current one we're analyzing)
-    history_messages = messages
-    
-    for msg in history_messages[-10:]:  # Last 10 messages from history
-        if isinstance(msg, HumanMessage):
-            formatted.append(f"User: {msg.content}")
-        elif isinstance(msg, AIMessage):
-            # Truncate long assistant responses
-            content = msg.content[:500] + "..." if len(msg.content) > 500 else msg.content
-            formatted.append(f"Assistant: {content}")
-        elif isinstance(msg, dict):
-            role = "User" if msg.get("role") == "user" else "Assistant"
-            content = msg.get("content", "")[:500] 
-            formatted.append(f"{role}: {content}")
-    
-    return "\n".join(formatted) if formatted else "No previous conversation."
-
 
 def get_llm():
     """Get the Azure OpenAI LLM instance."""
@@ -82,7 +59,6 @@ def get_llm():
         api_version=OPENAI_API_VERSION,
         azure_deployment='gpt-4.1-mini'
     )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN NODE FUNCTION
@@ -96,43 +72,33 @@ def conversation_analyzer_node(state: MedicalAgentState) -> Dict[str, Any]:
     3. Accumulates entities mentioned across turns
     4. Decides if clarification is needed
     """
-    
+    print(f"\n********* NODE 1: CONVERSATION ANALYZER *********\n")
     # Format conversation history
-    conversation_history = format_conversation_for_analysis(
-        state.get("conversation_history", [])
-    )
+    conversation_history = state.get("conversation_history", [])
     current_message = state.get("user_message", "")
-    
-    # Debug logging
-    print(f"[ConversationAnalyzer] History: {conversation_history[:200]}...")
-    print(f"[ConversationAnalyzer] Current message: {current_message}")
-    
+    current_analysis = state.get("conversation_analysis", None)
+
+    if current_analysis is not None:
+        accumulated_medications = current_analysis.accumulated_medications
+        accumulated_symptoms = current_analysis.accumulated_symptoms
+        accumulated_nutrients = current_analysis.accumulated_nutrients
+    else:
+        accumulated_medications = []
+        accumulated_symptoms = []
+        accumulated_nutrients = []
+
     try:
-        # Get LLM with structured output
         llm = get_llm()
-        
-        # Create the structured LLM that outputs ConversationAnalysis directly
-        
         # Build the prompt
         prompt = ChatPromptTemplate.from_messages([
             ("system", SYSTEM_PROMPT),
+            MessagesPlaceholder(variable_name="conversation_history"),
             ("human", USER_PROMPT_TEMPLATE)
         ])
         
-        # Create the chain
         chain = prompt | llm.with_structured_output(ConversationAnalysis)
         
-        response = chain.invoke({"conversation_history": conversation_history, "current_message": current_message})
-        
-        print(f"----> Response: {response}\n")
-        print(f"----> Response type: {type(response)}")
-        
-        # Debug logging
-        print(f"[ConversationAnalyzer] Intent: {response.detected_intent}")
-        print(f"[ConversationAnalyzer] Has sufficient info: {response.has_sufficient_info}")
-        print(f"[ConversationAnalyzer] Needs clarification: {response.needs_clarification}")
-        print(f"[ConversationAnalyzer] Accumulated meds: {response.accumulated_medications}")
-        
+        response = chain.invoke({"conversation_history": conversation_history, "query": current_message, "current_meds": accumulated_medications, "current_symps": accumulated_symptoms, "current_nuts": accumulated_nutrients})
         return {
             **state,
             "conversation_analysis": response,
@@ -165,28 +131,28 @@ def conversation_analyzer_node(state: MedicalAgentState) -> Dict[str, Any]:
 def test_conversation_analyzer():
     """Test the conversation analyzer node."""
     state = MedicalAgentState(
-        user_message="What nutrients would help me with my anemia?",
+        user_message="Are there any side effects of taking these drugs?",
         conversation_history=[HumanMessage(content="What nutrients does Acetaminophen deplete?"),
-        AIMessage(content="Acetaminophen deplete Glutathione.")],
-        conversation_analysis=None,
-        extracted_entities=[],
-        resolved_entities=[],
-        unresolved_entities=[],
-        generated_cypher="",
+        AIMessage(content="Acetaminophen depletes Glutathione"),
+        HumanMessage(content="I have a little depression, what can I do?"),
+        AIMessage(content="""Depression may indicate deficiency of:
+• Vitamin B12 (caused by: Abacavir, Lamivudine, And Zidovudine)
+• Zinc (caused by: Abacavir, Lamivudine, And Zidovudine)""")]
     )
     state = conversation_analyzer_node(state)
-    print(f"----> State: {state}")
-    print(f"----> Conversation analysis: {state['conversation_analysis']}")
+    print_state_debug(state)
 
     state = entity_extractor_node(state)
-    print(f"----> State: {state}")
-    print(f"----> Extracted entities: {state['extracted_entities']}")
-    print(f"----> Resolved entities: {state['resolved_entities']}")
-    print(f"----> Unresolved entities: {state['unresolved_entities']}")
-    print(f"\n----> FINAL STATE: {state}\n")
-    print(f"\n----> EXECUTION PATH: {state['execution_path']}\n")
+    print_state_debug(state)
 
     state = cypher_generator_node(state)
+    print_state_debug(state)
+
+    state = graph_executor_node(state)
+    print_state_debug(state)
+    
+    state = response_synthesizer_node(state)
+    print_state_debug(state)
 
 if __name__ == "__main__":
     test_conversation_analyzer()
