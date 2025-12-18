@@ -15,15 +15,20 @@ class Neo4jManager:
         self._driver_admin.close()
         self._driver_reader.close()
 
-    def run_safe_query(self, cypher_query):
+    def run_safe_query(self, cypher_query, parameters=None):
         """
         Aceasta este funcția pe care o apelezi din LangGraph.
         Folosește DOAR driverul READER.
+        
+        Args:
+            cypher_query: The Cypher query string
+            parameters: Optional dictionary of query parameters
         """
         try:
             # Folosim execute_query (metoda modernă din Neo4j 5.x)
             records, _, _ = self._driver_reader.execute_query(
-                cypher_query, 
+                cypher_query,
+                parameters_=parameters,
                 routing_=RoutingControl.READ
             )
             # Transformăm în JSON simplu pentru LLM
