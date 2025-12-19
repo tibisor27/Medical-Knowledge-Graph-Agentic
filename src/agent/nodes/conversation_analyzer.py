@@ -16,35 +16,9 @@ from src.config import AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, OPENAI_API_V
 from src.agent.nodes.entity_extractor import entity_extractor_node
 from src.agent.nodes.cypher_generator import cypher_generator_node
 from src.agent.nodes.graph_executor import graph_executor_node
-from src.prompts import CONV_ANALYZER_SYSTEM_PROMPT as SYSTEM_PROMPT
+from src.prompts import CONV_ANALYZER_SYSTEM_PROMPT as SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 from src.agent.nodes.response_synthesizer import response_synthesizer_node
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# USER PROMPT TEMPLATE
-# ═══════════════════════════════════════════════════════════════════════════════
-
-USER_PROMPT_TEMPLATE = """
-=== PREVIOUS ANALYZED STATE (Reference) ===
-The previous analysis identified these entities:
-- Meds: {current_meds}
-- Symptoms: {current_symps}
-- Nutrients: {current_nuts}
-
-=== NEW USER QUERY ===
-{query}
-
-=== CRITICAL INSTRUCTION FOR UPDATING ===
-You must reconcile the "Previous State" with the "Conversation History".
-
-1. **Rule of Truth**: The **Conversation History text** is the ultimate source of truth.
-2. **Handle Empty State**: If 'Medications' in Previous State is EMPTY (`[]`), but you see medications mentioned in the History text (e.g., in previous turns), **YOU MUST RE-EXTRACT THEM**. Do not assume they were deleted.
-3. **Merge Logic**:
-   - Start with entities from Previous State.
-   - ADD entities found in History that were missing from Previous State.
-   - ADD new entities from the New User Message.
-   - ONLY remove an entity if the user EXPLICITLY says "I stopped taking X".
-
-"""
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
@@ -77,6 +51,7 @@ def conversation_analyzer_node(state: MedicalAgentState) -> Dict[str, Any]:
     conversation_history = state.get("conversation_history", [])
     current_message = state.get("user_message", "")
     current_analysis = state.get("conversation_analysis", None)
+    print(f"Conversation history: {conversation_history}")
 
     if current_analysis is not None:
         accumulated_medications = current_analysis.accumulated_medications
@@ -101,6 +76,7 @@ def conversation_analyzer_node(state: MedicalAgentState) -> Dict[str, Any]:
         response = chain.invoke({"conversation_history": conversation_history, "query": current_message, "current_meds": accumulated_medications, "current_symps": accumulated_symptoms, "current_nuts": accumulated_nutrients})
         return {
             **state,
+            "user_message": current_message,
             "conversation_analysis": response,
             "execution_path": add_to_execution_path(state, "conversation_analyzer")
         }
@@ -122,6 +98,7 @@ def conversation_analyzer_node(state: MedicalAgentState) -> Dict[str, Any]:
         
         return {
             **state,
+            "user_message": current_message,
             "conversation_analysis": fallback_analysis,
             "execution_path": add_to_execution_path(state, "conversation_analyzer"),
             "errors": state.get("errors", []) + [f"Error in conversation_analyzer: {str(e)}"]
@@ -133,26 +110,22 @@ def test_conversation_analyzer():
     state = MedicalAgentState(
         user_message="Are there any side effects of taking these drugs?",
         conversation_history=[HumanMessage(content="What nutrients does Acetaminophen deplete?"),
-        AIMessage(content="Acetaminophen depletes Glutathione"),
-        HumanMessage(content="I have a little depression, what can I do?"),
-        AIMessage(content="""Depression may indicate deficiency of:
-• Vitamin B12 (caused by: Abacavir, Lamivudine, And Zidovudine)
-• Zinc (caused by: Abacavir, Lamivudine, And Zidovudine)""")]
+        AIMessage(content="Acetaminophen depletes Glutathione")]
     )
     state = conversation_analyzer_node(state)
     print_state_debug(state)
 
-    state = entity_extractor_node(state)
-    print_state_debug(state)
+    # state = entity_extractor_node(state)
+    # print_state_debug(state)
 
-    state = cypher_generator_node(state)
-    print_state_debug(state)
+    # state = cypher_generator_node(state)
+    # print_state_debug(state)
 
-    state = graph_executor_node(state)
-    print_state_debug(state)
+    # state = graph_executor_node(state)
+    # print_state_debug(state)
     
-    state = response_synthesizer_node(state)
-    print_state_debug(state)
+    # state = response_synthesizer_node(state)
+    # print_state_debug(state)
 
 if __name__ == "__main__":
     test_conversation_analyzer()
