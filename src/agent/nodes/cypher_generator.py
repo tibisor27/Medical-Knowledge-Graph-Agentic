@@ -10,114 +10,22 @@ This node generates Cypher queries based on:
 import json
 import re
 from typing import Dict, Any, List
-from langchain_openai import AzureChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
+from src.agent.utils import format_resolved_entities
+from src.utils.get_llm import get_llm_5_1_chat
 from src.agent.state import (
     MedicalAgentState, 
-    ResolvedEntity,
     CypherGeneratorResponse,
     add_to_execution_path
 )
-from src.config import (
-    AZURE_OPENAI_ENDPOINT, 
-    AZURE_OPENAI_API_KEY, 
-    OPENAI_API_VERSION,
-    validate_config
-)
-from src.agent.state import print_state_debug
 from src.prompts import (
     CYPHER_SYSTEM_PROMPT as SYSTEM_PROMPT, 
     GRAPH_SCHEMA, 
     CYPHER_EXAMPLES, 
     CYPHER_USER_PROMPT as USER_PROMPT_TEMPLATE
 )
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# CYPHER VALIDATION
-# ═══════════════════════════════════════════════════════════════════════════════
-
-FORBIDDEN_KEYWORDS = ["CREATE", "DELETE", "SET", "MERGE", "REMOVE", "DROP", "DETACH"]
-VALID_NODE_LABELS = ["Medicament", "Nutrient", "DepletionEvent", "Symptom", "Study", 
-                     "PharmacologicClass", "FoodSource", "SideEffect"]
-VALID_RELATIONSHIPS = ["CAUSES", "DEPLETES", "Has_Symptom", "HAS_EVIDENCE", 
-                       "Belongs_To", "Found_In", "Has_Side_Effect"]
-
-
-
-
-
-def validate_cypher(cypher: str) -> tuple[bool, List[str]]:
-    """
-    Validate a Cypher query for safety and correctness.
-    
-    Returns:
-        Tuple of (is_valid, list_of_errors)
-    """
-    errors = []
-    
-    if not cypher or not cypher.strip():
-        return False, ["EMPTY CYPHER QUERY"]
-    
-    cypher_upper = cypher.upper()
-    
-    # Check for forbidden write operations
-    for keyword in FORBIDDEN_KEYWORDS:
-        if keyword in cypher_upper:
-            errors.append(f"Forbidden keyword '{keyword}' found - only READ operations allowed")
-    
-    # Check for LIMIT clause
-    if "LIMIT" not in cypher_upper:
-        errors.append("Missing LIMIT clause - all queries must have a LIMIT")
-    
-    # Check for RETURN clause
-    if "RETURN" not in cypher_upper:
-        errors.append("Missing RETURN clause")
-    
-    # Check that we're not returning entire nodes (bad practice)
-    # This is a simple heuristic - look for "RETURN n" without properties
-    return_match = re.search(r'RETURN\s+(\w+)\s*(?:,|\s*LIMIT|$)', cypher, re.IGNORECASE)
-    if return_match:
-        var_name = return_match.group(1)
-        if not re.search(rf'{var_name}\.\w+', cypher):
-            # Variable is returned without any property access
-            pass  # This is actually okay in some cases, so we won't error
-    
-    return len(errors) == 0, errors
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# HELPER FUNCTIONS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def get_llm_5_1_chat():
-    """Get the Azure OpenAI LLM instance."""
-    validate_config()
-    return AzureChatOpenAI(
-        azure_endpoint=AZURE_OPENAI_ENDPOINT,
-        api_key=AZURE_OPENAI_API_KEY,
-        api_version=OPENAI_API_VERSION,
-        azure_deployment='gpt-5.1-chat' # Deterministic for code generation
-    )
-
-
-
-def format_resolved_entities(entities: List[ResolvedEntity]) -> str:
-    """Format resolved entities for the prompt."""
-    if not entities:
-        return "No entities were resolved from the graph."
-    
-    lines = []
-    for entity in entities:
-        lines.append(
-            f"- '{entity.original_text}' → {entity.resolved_name} "
-            f"(type: {entity.node_type}, match: {entity.match_method}, score: {entity.match_score:.2f})"
-        )
-    
-    return "\n".join(lines)
-
-
-
+from src.utils.validators import validate_cypher
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN NODE FUNCTION
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -132,8 +40,8 @@ def cypher_generator_node(state: MedicalAgentState) -> Dict[str, Any]:
     3. Validates the query for safety
     4. Returns the query ready for execution
     """
-    print(f"\n********* NODE 4: CYPHER GENERATOR *********\n")
-    # Get intent from conversation analysis (Pydantic model)
+    print(f"\n********* NODE 3: CYPHER GENERATOR *********\n")
+
     analysis_object = state['conversation_analysis']
     intent = analysis_object.detected_intent if analysis_object else "GENERAL_MEDICAL"
 
@@ -142,9 +50,10 @@ def cypher_generator_node(state: MedicalAgentState) -> Dict[str, Any]:
     user_message = state.get('user_message')
     
     # DEBUG: Print what we're working with
-    print(f"----> Intent: {intent}")
-    print(f"----> User message: {user_message}")
-    print(f"----> Resolved entities count: {len(resolved_entities) if resolved_entities else 0}")
+    print(f"----> DEBUG: Intent from analysis: {intent}")
+    print(f"----> DEBUG: User message: {user_message}")
+    print(f"----> DEBUG: Resolved entities: {resolved_entities}")
+    
     if resolved_entities:
         for i, e in enumerate(resolved_entities):
             print(f"      Entity {i}: {e.resolved_name} ({e.node_type})")
@@ -153,7 +62,7 @@ def cypher_generator_node(state: MedicalAgentState) -> Dict[str, Any]:
     
     # If no resolved entities, we can't generate a useful query
     if not resolved_entities:
-        print("❌ ERROR: No resolved entities to query!")
+        print("      ❌ ERROR: No entities to query the graph with!")
         return {
             **state,
             "generated_cypher": "",
