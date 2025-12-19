@@ -29,92 +29,7 @@ from src.config import (
 )
 
 from src.prompts import ENTITY_EXTRACTION_SYSTEM_PROMPT
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# USER PROMPT TEMPLATE
-# ═══════════════════════════════════════════════════════════════════════════════
-
-USER_PROMPT_TEMPLATE = """
-    === PREVIOUS ANALYZED STATE (Reference) ===
-    The previous analysis identified these entities:
-    Accumulated medications: {accumulated_medications}
-    Accumulated symptoms: {accumulated_symptoms}
-    Accumulated nutrients: {accumulated_nutrients}
-
-    === NEW USER MESSAGE ===
-    {query}
-    
-    Extract ALL medical entities from the NEW USER QUERY above. 
-    Resolve pronouns using the Context and Conversation History.
-    """
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# GRAPH VALIDATION QUERIES
-# ═══════════════════════════════════════════════════════════════════════════════
-
-MEDICATION_FULLTEXT_QUERY = """
-CALL db.index.fulltext.queryNodes("medicament_full_search", $search_term)
-YIELD node, score
-WHERE score > 0.5
-RETURN node.name AS name, score, "Medicament" AS node_type
-ORDER BY score DESC
-LIMIT 3
-"""
-
-NUTRIENT_FULLTEXT_QUERY = """
-CALL db.index.fulltext.queryNodes("nutrient_full_search", $search_term)
-YIELD node, score
-WHERE score > 0.5
-RETURN node.name AS name, score, "Nutrient" AS node_type
-ORDER BY score DESC
-LIMIT 3
-"""
-
-PHARMACOLOGIC_CLASS_FULLTEXT_QUERY = """
-CALL db.index.fulltext.queryNodes("pharmacologic_class_full_search", $search_term)
-YIELD node, score
-WHERE score > 0.5
-RETURN p.pharmacologic_class AS name, score, "PharmacologicClass" AS node_type
-ORDER BY score DESC
-LIMIT 3
-"""
-
-PHARMACOLOGIC_CLASS_DIRECT_QUERY = """
-MATCH (p:PharmacologicClass)
-WHERE toLower(p.pharmacologic_class) CONTAINS toLower($search_term)
-RETURN p.pharmacologic_class AS name, 1.0 AS score, "PharmacologicClass" AS node_type
-LIMIT 3
-"""
-
-# Fallback: Direct match queries (if fulltext index doesn't exist)
-MEDICATION_DIRECT_QUERY = """
-MATCH (m:Medicament)
-WHERE toLower(m.name) CONTAINS toLower($search_term)
-   OR ANY(brand IN m.brand_names WHERE toLower(brand) CONTAINS toLower($search_term))
-   OR ANY(syn IN m.synonyms WHERE toLower(syn) CONTAINS toLower($search_term))
-RETURN m.name AS name, 1.0 AS score, "Medicament" AS node_type
-LIMIT 3
-"""
-
-NUTRIENT_DIRECT_QUERY = """
-MATCH (n:Nutrient)
-WHERE toLower(n.name) CONTAINS toLower($search_term)
-   OR ANY(syn IN n.synonyms WHERE toLower(syn) CONTAINS toLower($search_term))
-RETURN n.name AS name, 1.0 AS score, "Nutrient" AS node_type
-LIMIT 3
-"""
-
-SYMPTOM_QUERY = """
-CALL db.index.fulltext.queryNodes("symptom_full_search", $search_term)
-YIELD node, score
-WHERE score > 0.5
-RETURN node.name AS name, score, "Symptom" AS node_type
-ORDER BY score DESC
-LIMIT 3
-"""
-
+from src.prompts import MEDICATION_FULLTEXT_QUERY, NUTRIENT_FULLTEXT_QUERY, PHARMACOLOGIC_CLASS_FULLTEXT_QUERY, PHARMACOLOGIC_CLASS_DIRECT_QUERY, MEDICATION_DIRECT_QUERY,NUTRIENT_DIRECT_QUERY, SYMPTOM_QUERY
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
@@ -128,7 +43,7 @@ def get_llm():
         api_key=AZURE_OPENAI_API_KEY,
         api_version=OPENAI_API_VERSION,
         azure_deployment='gpt-4.1-mini',
-        temperature=0.0 # More deterministic for extraction
+        temperature=0.0
     )
 
 
@@ -230,181 +145,55 @@ def resolve_entity_in_graph(entity: ExtractedEntity, neo4j_client) -> Tuple[bool
 def entity_extractor_node(state: MedicalAgentState) -> Dict[str, Any]:
     """
     Extract entities from the query and validate them against the knowledge graph.
-    
-    This node:
-    1. Uses LLM to extract medical entities from the query
-    2. Validates each entity against Neo4j using Full-Text Index
-    3. Separates resolved (found) from unresolved (not found) entities
+
+    1. Validates each entity against Neo4j using Full-Text Index
+    2. Separates resolved (found) from unresolved (not found) entities
     """
 
     print(f"\n********* NODE 2: ENTITY EXTRACTION *********\n")
     llm = get_llm()
     analysis = state.get("conversation_analysis")
-    conversation_history = state.get("conversation_history", [])
     
+    candidates = []
     # Access fields from Pydantic model or use defaults
     if analysis is not None:
         step_by_step_reasoning = analysis.step_by_step_reasoning
-        accumulated_medications = analysis.accumulated_medications
-        accumulated_symptoms = analysis.accumulated_symptoms
-        accumulated_nutrients = analysis.accumulated_nutrients
+        medications = [ExtractedEntity(text=medication, type="MEDICATION") for medication in analysis.accumulated_medications]
+        nutrients = [ExtractedEntity(text=nutrient, type="NUTRIENT") for nutrient in analysis.accumulated_nutrients]
+        symptoms = [ExtractedEntity(text=symptom, type="SYMPTOM") for symptom in analysis.accumulated_symptoms]
+        candidates = medications + nutrients + symptoms
+        step_by_step_reasoning = analysis.step_by_step_reasoning
     else:
         step_by_step_reasoning = "No conversation analysis found"
-        accumulated_medications = []
-        accumulated_symptoms = []
-        accumulated_nutrients = []
+        candidates = []
     
-    # Build the extraction prompt
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", ENTITY_EXTRACTION_SYSTEM_PROMPT),
-
-        MessagesPlaceholder(variable_name="conversation_history"),
-        
-        ("human", USER_PROMPT_TEMPLATE)
-    ])
-
-    chain = prompt | llm.with_structured_output(EntityExtractionResponse)
-
-    response = chain.invoke({
-        "conversation_history": conversation_history,
-        "query": state.get("user_message", ""),
-        "accumulated_medications": accumulated_medications,
-        "accumulated_symptoms": accumulated_symptoms,
-        "accumulated_nutrients": accumulated_nutrients
-    })
-
-    extracted_entities = list(response.entities)
-    print(f"\n----> LLM extracted entities: {extracted_entities}")
-    
-    # ═══════════════════════════════════════════════════════════════════════════════
-    # ADD ACCUMULATED ENTITIES BASED ON INTENT
-    # If intent is NUTRIENT_INFO, we need the nutrient from accumulated_nutrients
-    # If intent is DRUG_INFO, we need the medication from accumulated_medications
-    # ═══════════════════════════════════════════════════════════════════════════════
-    
-    intent = analysis.detected_intent if analysis else "GENERAL_MEDICAL"
-    extracted_texts = {e.text.lower() for e in extracted_entities}
-    
-    # DEBUG: Print what we have from analysis
-    print(f"\n----> DEBUG: Intent from analysis: '{intent}'")
-    print(f"----> DEBUG: Accumulated medications: {accumulated_medications}")
-    print(f"----> DEBUG: Accumulated nutrients: {accumulated_nutrients}")
-    print(f"----> DEBUG: Accumulated symptoms: {accumulated_symptoms}")
-    print(f"----> DEBUG: Already extracted texts: {extracted_texts}")
-    
-    # For NUTRIENT_INFO - add nutrients from context
-    if intent in ["NUTRIENT_INFO", "DEFICIENCY_SYMPTOMS", "FOOD_SOURCES", "NUTRIENT_DEPLETED_BY"]:
-        for nutrient in accumulated_nutrients:
-            if nutrient.lower() not in extracted_texts:
-                print(f"----> Adding accumulated nutrient for {intent}: {nutrient}")
-                extracted_entities.append(ExtractedEntity(
-                    text=nutrient,
-                    type="NUTRIENT",
-                    confidence=0.9
-                ))
-                extracted_texts.add(nutrient.lower())
-    
-    # For DRUG_INFO or DRUG_DEPLETES - add medications from context
-    if intent in ["DRUG_INFO", "DRUG_DEPLETES_NUTRIENT"]:
-        for med in accumulated_medications:
-            if med.lower() not in extracted_texts:
-                print(f"----> Adding accumulated medication for {intent}: {med}")
-                extracted_entities.append(ExtractedEntity(
-                    text=med,
-                    type="MEDICATION",
-                    confidence=0.9
-                ))
-                extracted_texts.add(med.lower())
-    
-    # For SYMPTOM_TO_DEFICIENCY - add symptoms from context
-    if intent == "SYMPTOM_TO_DEFICIENCY":
-        for symptom in accumulated_symptoms:
-            if symptom.lower() not in extracted_texts:
-                print(f"----> Adding accumulated symptom for {intent}: {symptom}")
-                extracted_entities.append(ExtractedEntity(
-                    text=symptom,
-                    type="SYMPTOM",
-                    confidence=0.9
-                ))
-                extracted_texts.add(symptom.lower())
-    
-    # For GENERAL_MEDICAL or unknown intents - add ALL accumulated entities
-    # This handles vague queries like "Are there any side effects of taking these?"
-    if intent in ["GENERAL_MEDICAL", "UNKNOWN"] or not extracted_entities or all(e.text.lower() in ["these", "this", "that", "it", "them"] for e in extracted_entities):
-        print(f"----> GENERAL/VAGUE query detected - adding all accumulated entities")
-        
-        # Add all medications
-        for med in accumulated_medications:
-            if med.lower() not in extracted_texts:
-                print(f"----> Adding accumulated medication: {med}")
-                extracted_entities.append(ExtractedEntity(
-                    text=med,
-                    type="MEDICATION",
-                    confidence=0.9
-                ))
-                extracted_texts.add(med.lower())
-        
-        # Add all nutrients
-        for nutrient in accumulated_nutrients:
-            if nutrient.lower() not in extracted_texts:
-                print(f"----> Adding accumulated nutrient: {nutrient}")
-                extracted_entities.append(ExtractedEntity(
-                    text=nutrient,
-                    type="NUTRIENT",
-                    confidence=0.9
-                ))
-                extracted_texts.add(nutrient.lower())
-        
-        # Add all symptoms
-        for symptom in accumulated_symptoms:
-            if symptom.lower() not in extracted_texts:
-                print(f"----> Adding accumulated symptom: {symptom}")
-                extracted_entities.append(ExtractedEntity(
-                    text=symptom,
-                    type="SYMPTOM",
-                    confidence=0.9
-                ))
-                extracted_texts.add(symptom.lower())
-    
-    # Remove pronoun entities (these, this, that, it, them) - they're not useful
-    extracted_entities = [e for e in extracted_entities if e.text.lower() not in ["these", "this", "that", "it", "them"]]
-    
-    print(f"\n----> Final entities after adding accumulated: {extracted_entities}")
+    print(f"Searching for entities in the graph: {candidates}")
     
     resolved_entities = []
     unresolved_entities = []
     
     neo4j_client = get_neo4j_client()
     
-    for entity in extracted_entities:
+    for entity in candidates:
         was_resolved, resolved_entity = resolve_entity_in_graph(entity, neo4j_client)
         
         if was_resolved and resolved_entity:
             resolved_entities.append(resolved_entity)
         else:
             unresolved_entities.append(entity)
-        
+
+     # DEBUG: Print what we have from analysis
+    print(f"\n----> DEBUG: Intent from analysis: '{analysis.detected_intent}'")
+    print(f"----> DEBUG: Accumulated medications: {analysis.accumulated_medications}")
+    print(f"----> DEBUG: Accumulated nutrients: {analysis.accumulated_nutrients}")
+    print(f"----> DEBUG: Accumulated symptoms: {analysis.accumulated_symptoms}")
+    print(f"----> DEBUG: Already extracted texts: {candidates}")
+    print(f"\n----> Final entities after adding accumulated: {resolved_entities}")
+    print(f"----> DEBUG: Unresolved entities: {unresolved_entities}")
+    
     return {
         **state,
-        "extracted_entities": extracted_entities,
         "resolved_entities": resolved_entities,
         "unresolved_entities": unresolved_entities,
         "execution_path": add_to_execution_path(state, "entity_extractor")
     }
-
-
-def test_entity_extractor():
-    """Test the entity extractor node."""
-    state = MedicalAgentState(
-        user_message="What If I take that Nurofen? it will affect my sleep because of any nutrient depletion?",
-        conversation_history=[HumanMessage(content="What nutrients does Acetaminophen deplete?")]
-    )
-    state = entity_extractor_node(state)
-    print(f"----> State: {state}")
-    print(f"----> Extracted entities: {state['extracted_entities']}")
-    print(f"----> Resolved entities: {state['resolved_entities']}")
-    print(f"----> Unresolved entities: {state['unresolved_entities']}")
-
-
-if __name__ == "__main__":
-    test_entity_extractor()
