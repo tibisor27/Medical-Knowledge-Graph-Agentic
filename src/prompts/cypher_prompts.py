@@ -38,7 +38,8 @@ QUERY TEMPLATES BY INTENT (use the one matching the intent):
 --- DRUG_DEPLETES_NUTRIENT ---
 CALL db.index.fulltext.queryNodes("medicament_full_search", $med_name) YIELD node AS m, score
 MATCH (m)-[:CAUSES]->(e:DepletionEvent)-[:DEPLETES]->(n:Nutrient)
-RETURN m.name AS medication, n.name AS nutrient, n.overview AS nutrient_info
+RETURN m.name AS medication, n.name AS nutrient,n.biological_function_effect
+AS biological_function_effect, n.overview AS nutrient_info
 LIMIT 10
 Params: {"med_name": "..."}
 
