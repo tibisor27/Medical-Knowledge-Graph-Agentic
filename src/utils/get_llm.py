@@ -14,3 +14,14 @@ def get_llm_5_1_chat() -> AzureChatOpenAI:
         api_version=OPENAI_API_VERSION,
         azure_deployment='gpt-5.1-chat'
     )
+
+def get_llm_4_1_mini() -> AzureChatOpenAI:
+    """Get the Azure OpenAI LLM instance."""
+    validate_config()
+    return AzureChatOpenAI(
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        api_key=AZURE_OPENAI_API_KEY,
+        api_version=OPENAI_API_VERSION,
+        azure_deployment='gpt-4.1-mini',
+        temperature=0.0
+    )
