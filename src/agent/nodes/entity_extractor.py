@@ -183,7 +183,7 @@ def entity_extractor_node(state: MedicalAgentState) -> Dict[str, Any]:
             unresolved_entities.append(entity)
 
      # DEBUG: Print what we have from analysis
-    print(f"\n----> DEBUG: Intent from analysis: '{analysis.detected_intent}'")
+    print(f"\n----> DEBUG: Retrieval Type from analysis: '{analysis.retrieval_type}'")
     print(f"----> DEBUG: Accumulated medications: {analysis.accumulated_medications}")
     print(f"----> DEBUG: Accumulated nutrients: {analysis.accumulated_nutrients}")
     print(f"----> DEBUG: Accumulated symptoms: {analysis.accumulated_symptoms}")

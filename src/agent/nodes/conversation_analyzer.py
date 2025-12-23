@@ -16,8 +16,9 @@ from src.config import AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, OPENAI_API_V
 from src.agent.nodes.entity_extractor import entity_extractor_node
 from src.agent.nodes.cypher_generator import cypher_generator_node
 from src.agent.nodes.graph_executor import graph_executor_node
-from src.prompts import CONV_ANALYZER_SYSTEM_PROMPT as SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
+from src.prompts import CONV_ANALYZER_SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 from src.agent.nodes.response_synthesizer import response_synthesizer_node
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -31,7 +32,7 @@ def get_llm():
         azure_endpoint=AZURE_OPENAI_ENDPOINT,
         api_key=AZURE_OPENAI_API_KEY,
         api_version=OPENAI_API_VERSION,
-        azure_deployment='gpt-4.1-mini'
+        azure_deployment='gpt-5.1-chat'
     )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -51,8 +52,7 @@ def conversation_analyzer_node(state: MedicalAgentState) -> Dict[str, Any]:
     conversation_history = state.get("conversation_history", [])
     current_message = state.get("user_message", "")
     current_analysis = state.get("conversation_analysis", None)
-    print(f"Conversation history: {conversation_history}")
-
+    
     if current_analysis is not None:
         accumulated_medications = current_analysis.accumulated_medications
         accumulated_symptoms = current_analysis.accumulated_symptoms
@@ -66,7 +66,7 @@ def conversation_analyzer_node(state: MedicalAgentState) -> Dict[str, Any]:
         llm = get_llm()
         # Build the prompt
         prompt = ChatPromptTemplate.from_messages([
-            ("system", SYSTEM_PROMPT),
+            ("system", CONV_ANALYZER_SYSTEM_PROMPT),
             MessagesPlaceholder(variable_name="conversation_history"),
             ("human", USER_PROMPT_TEMPLATE)
         ])
@@ -88,7 +88,7 @@ def conversation_analyzer_node(state: MedicalAgentState) -> Dict[str, Any]:
         # Create a fallback analysis
         fallback_analysis = ConversationAnalysis(
             has_sufficient_info=False,
-            detected_intent="NEEDS_CLARIFICATION",
+            retrieval_type=NO_RETRIEVAL,
             needs_clarification=True,
             clarification_question="I couldn't understand your question. Could you please rephrase it?",
             accumulated_medications=[],
