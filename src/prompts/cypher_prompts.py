@@ -15,12 +15,16 @@ NODE LABELS AND PROPERTIES:
 5. Study - study_title, source, content
 6. PharmacologicClass - pharmacologic_class
 7. FoodSource - dietary_source
+8. SideEffect - name, description
 
 RELATIONSHIPS:
-(Medicament)-[:CAUSES]->(DepletionEvent)-[:DEPLETES]->(Nutrient)
+(Medicament)-[:CAUSES]->(DepletionEvent)
+(DepletionEvent)-[:DEPLETES]->(Nutrient)
 (DepletionEvent)-[:Has_Symptom]->(Symptom)
 (DepletionEvent)-[:HAS_EVIDENCE]->(Study)
 (Nutrient)-[:Found_In]->(FoodSource)
+(Nutrient)-[:Has_Side_Effect]->(SideEffect)
+(Medicament)-[:Belongs_To]->(PharmacologicClass)
 
 FULL-TEXT INDEXES:
 - "medicament_full_search" on Medicament(name, synonyms, brand_names)
