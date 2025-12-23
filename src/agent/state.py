@@ -10,7 +10,7 @@ from typing_extensions import Annotated
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from pydantic import BaseModel, Field
-
+from enum import Enum
 # ═══════════════════════════════════════════════════════════════════════════════
 # Cypher Generator Response Types
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -29,7 +29,6 @@ class ExtractedEntity(BaseModel):
     """An entity extracted from the user's query."""
     text: str                    # Original text from query ("Tylenol")
     type: str                    # Entity type: MEDICATION, NUTRIENT, SYMPTOM, DRUG_CLASS, CONDITION
-    confidence: float            # Extraction confidence (0.0 - 1.0)
 
 
 class ResolvedEntity(BaseModel):
@@ -62,14 +61,22 @@ VALID_INTENTS = Literal[
     "OFF_TOPIC"                  # Not medical related
 ]
 
+class RetrievalType(str, Enum):
+    """What type of Cypher query to perform"""
+    MEDICATION_LOOKUP = "MEDICATION_LOOKUP"
+    SYMPTOM_INVESTIGATION = "SYMPTOM_INVESTIGATION"
+    CONNECTION_VALIDATION = "CONNECTION_VALIDATION"
+    NUTRIENT_EDUCATION = "NUTRIENT_EDUCATION"
+    NO_RETRIEVAL = "NO_RETRIEVAL"
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONVERSATION ANALYSIS TYPES
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class ConversationAnalysis(BaseModel):
     step_by_step_reasoning: str = Field(description="A detailed analysis of the conversation context, pronoun resolution, and entity accumulation logic.")
-    detected_intent: VALID_INTENTS = Field( ..., description="The classification of the user's goal.") 
-    has_sufficient_info: bool = Field(..., description="Set to True ONLY if we have both the intent and the necessary entities (e.g., a specific drug name) to perform a database query.")  
+    has_sufficient_info: bool = Field(..., description="Set to True ONLY if we have both the intent and the necessary entities (e.g., a specific drug name) to perform a database query.") 
+    retrieval_type: RetrievalType = Field(..., description="The type of retrieval to perform.")
     needs_clarification: bool = Field(..., description="Set to True if the user mentions symptoms but hasn't specified a medication, or if the drug name is ambiguous/unknown.")
     clarification_question: Optional[str] = Field(None, description="A polite follow-up question to ask the user if clarification is needed. Return None (null) if everything is clear.")
     accumulated_medications: List[str] = Field(default_factory=list, description="A list of ALL medication names mentioned anywhere in the conversation history, not just the last message.")
@@ -260,9 +267,9 @@ def print_analysis_debug(analysis: ConversationAnalysis):
     
     print("----> CONVERSATION ANALYSIS:")
     print(f"   • Step by Step Reasoning: {analysis.step_by_step_reasoning}")
-    print(f"   • Intent: {analysis.detected_intent}")
     print(f"   • Sufficient Info: {analysis.has_sufficient_info}")
     print(f"   • Needs Clarification: {analysis.needs_clarification}")
+    print(f"   • Clarification Question: {analysis.clarification_question}")
     print(f"   • Accumulated Meds: {analysis.accumulated_medications}")
     print(f"   • Accumulated Symptoms: {analysis.accumulated_symptoms}")
     print(f"   • Accumulated Nutrients: {analysis.accumulated_nutrients}")
