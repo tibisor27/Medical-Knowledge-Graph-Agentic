@@ -5,8 +5,8 @@ This module defines the state that flows through the LangGraph workflow.
 The state accumulates information as it passes through each node.
 """
 
-from typing import TypedDict, Optional, List, Dict, Any, Literal
-from typing_extensions import Annotated
+from typing import List, Dict, Any, Optional, Annotated
+from typing_extensions import TypedDict, Literal
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from pydantic import BaseModel, Field
