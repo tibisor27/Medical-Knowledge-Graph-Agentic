@@ -36,31 +36,33 @@ def graph_executor_node(state: MedicalAgentState) -> Dict[str, Any]:
     if r_type == RetrievalType.MEDICATION_LOOKUP:
         query = """
         UNWIND $medications AS med_name
-        
         // 1. Găsim medicamentul
-        CALL db.index.fulltext.queryNodes('medicament_full_search', med_name) 
+        CALL db.index.fulltext.queryNodes("medicament_full_search", med_name) 
         YIELD node AS med, score
         WHERE score > 0.5
         WITH med, score ORDER BY score DESC LIMIT 1
-        
-        // 2. Găsim relațiile
-        MATCH (med)-[:CAUSES]->(de:DepletionEvent)-[:DEPLETES]->(nut:Nutrient)
+
+        // 2. Găsim relațiile (MODIFICARE AICI: OPTIONAL MATCH)
+        // Daca nu gaseste relatii, 'nut', 'de' si 'sym' vor fi NULL, dar 'med' ramane!
+        OPTIONAL MATCH (med)-[:CAUSES]->(de:DepletionEvent)-[:DEPLETES]->(nut:Nutrient)
         OPTIONAL MATCH (de)-[:Has_Symptom]->(sym:Symptom)
-        
-        // 3. PAS CRITIC: Pregătim structurile de date ÎNAINTE de agregare
+
+        // 3. Pregătim datele (Gestionam NULL-urile)
         WITH med, 
-                {
+            nut,
+            sym,
+            // Verificam daca am gasit ceva, altfel returnam null in obiect
+            CASE WHEN nut IS NOT NULL THEN {
                 nutrient: nut.name
-                } AS dep_data,
-                sym
-        
-        // 4. PAS CRITIC: Agregăm listele AICI (folosind WITH), nu în RETURN
-        // Asta rezolvă eroarea "Implicit Grouping"
+            } ELSE null END AS dep_data
+
+        // 4. Agregăm
         WITH med, 
-                collect(DISTINCT dep_data) AS depletions_list,
-                collect(DISTINCT sym.name) AS symptoms_list
-        
-        // 5. Acum putem construi JSON-ul final liniștiți
+            // collect ignora automat null-urile, deci daca nu are depletii, lista va fi goala []
+            collect(DISTINCT dep_data) AS depletions_list,
+            collect(DISTINCT sym.name) AS symptoms_list
+
+        // 5. Returnăm
         RETURN {
             medication: {
                 name: med.name,
@@ -68,7 +70,6 @@ def graph_executor_node(state: MedicalAgentState) -> Dict[str, Any]:
             },
             depletions: depletions_list,
             symptoms_to_ask: symptoms_list[0..5]
-
         } AS context
         """
         params = {"medications": accumulated_medications}
