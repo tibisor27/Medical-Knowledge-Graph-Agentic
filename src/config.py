@@ -3,13 +3,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+MAX_ENTITIES_DETAILED = 5
+MAX_RESPONSE_WORDS = 150
 # ═══════════════════════════════════════════════════════════════════════════════
 # AZURE OPENAI CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 OPENAI_API_VERSION = os.getenv("OPENAI_API_VERSION")
-
+AZURE_DEPLOYMENT_NAME = os.getenv("AZURE_DEPLOYMENT_NAME")
+AZURE_EMBEDDINGS_DEPLOYMENT_NAME = os.getenv("AZURE_EMBEDDINGS_DEPLOYMENT_NAME")
 # ═══════════════════════════════════════════════════════════════════════════════
 # NEO4J CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -30,6 +33,12 @@ def validate_config():
     if not AZURE_OPENAI_API_KEY:
         errors.append("AZURE_OPENAI_API_KEY is not set")
     
+    if not AZURE_DEPLOYMENT_NAME:
+        errors.append("AZURE_DEPLOYMENT_NAME is not set - this should be your Azure OpenAI deployment name (e.g., 'gpt-4o-mini')")
+    
+    if not AZURE_EMBEDDINGS_DEPLOYMENT_NAME:
+        errors.append("AZURE_EMBEDDINGS_DEPLOYMENT_NAME is not set - this should be your Azure OpenAI embeddings deployment name (e.g., 'text-embedding')")
+    
     if not NEO4J_URI:
         errors.append("NEO4J_URI is not set")
     
@@ -44,6 +53,10 @@ def validate_config():
     
     if not LLM_READER_PASSWORD:
         errors.append("LLM_READER_PASSWORD is not set")
+
+    if not AZURE_OPENAI_ENDPOINT:
+        errors.append("AZURE_OPENAI_ENDPOINT is not set")
+
     
     if errors:
         raise ValueError(f"Configuration errors:\n" + "\n".join(f"  - {e}" for e in errors))
