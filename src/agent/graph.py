@@ -1,92 +1,109 @@
+import logging
 from typing import Dict, Any, Literal
 from langgraph.graph import StateGraph, END, START
 from langchain_core.messages import HumanMessage, AIMessage
-
-from src.agent.state import MedicalAgentState, create_initial_state, print_state_debug
+from src.agent.state import MedicalAgentState, RetrievalType, create_initial_state, print_state_execution_path
 from src.agent.nodes.conversation_analyzer import conversation_analyzer_node
 from src.agent.nodes.entity_extractor import entity_extractor_node
-from src.agent.nodes.cypher_generator import cypher_generator_node
 from src.agent.nodes.graph_executor import graph_executor_node
 from src.agent.nodes.response_synthesizer import response_synthesizer_node
-from src.agent.nodes.off_topic_response import off_topic_response_node
-from src.agent.nodes.error_node import error_response_node
+
+logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROUTING FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def route_after_conversation_analysis(state: MedicalAgentState) -> Literal["clarify", "extract_entities", "end"]:
+def route_after_conversation_analysis(state: MedicalAgentState) -> Literal["respond", "retrieve"]:
     """
-    Determine the next step after conversation analysis.
+    ROUTING SIMPLU (2 căi):
     
-    Routes to:
-    - "clarify": If we need more information from the user
-    - "extract_entities": If we have enough info to proceed
-    - "end": If the query is off-topic
+    1. RESPOND → response_synthesizer (direct)
+       - NO_RETRIEVAL (greetings, acknowledgments, follow-ups, off-topic)
+       - needs_clarification (întrebări de clarificare)
+    
+    2. RETRIEVE → entity_extractor → graph_executor → response_synthesizer
+       - MEDICATION_LOOKUP, SYMPTOM_INVESTIGATION, CONNECTION_VALIDATION, etc.
     """
-    # Get analysis from state
     analysis = state.get("conversation_analysis")
     
-    if analysis is None or analysis.clarification_question is not None:
-        return "clarify"  # Safe fallback
+    if analysis is None:
+        logger.warning("No analysis, routing to RESPOND")
+        return "respond"
     
-    # Access fields from the Pydantic model
     retrieval_type = analysis.retrieval_type
-    needs_clarification = analysis.needs_clarification
     
-    # Off-topic queries go straight to response
-    if retrieval_type == "NO_RETRIEVAL":
-        return "end"
+    # Check if NO_RETRIEVAL
+    is_no_retrieval = (
+        retrieval_type == RetrievalType.NO_RETRIEVAL or 
+        str(retrieval_type) == "NO_RETRIEVAL" or
+        (hasattr(retrieval_type, 'value') and retrieval_type.value == "NO_RETRIEVAL")
+    )
     
-    # If we need clarification, go to response to ask the question
-    if needs_clarification:
-        return "clarify"
+    if is_no_retrieval:
+        logger.info("Routing to RESPOND - NO_RETRIEVAL")
+        return "respond"
     
-    # Otherwise, proceed with entity extraction
-    return "extract_entities"
-
-
-def route_after_cypher_generation(state: MedicalAgentState) -> Literal["execute", "respond_error"]:
-    """
-    Determine whether to execute the Cypher or respond with an error.
-    """
-    cypher_is_valid = state.get("cypher_is_valid", False)
-    generated_cypher = state.get("generated_cypher", "")
-    
-    if cypher_is_valid and generated_cypher:
-        return "execute"
-    else:
-        return "respond_error"
-
+    logger.info(f"Routing to RETRIEVE - {retrieval_type}")
+    return "retrieve"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # BUILD THE GRAPH
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def create_medical_agent_graph():
+    """
+    GRAF SIMPLIFICAT:
     
+    ┌──────────────────────┐
+    │ conversation_analyzer│
+    └──────────┬───────────┘
+               │
+       ┌───────┴───────┐
+       ▼               ▼
+    RESPOND         RETRIEVE
+       │               │
+       │        ┌──────┴──────┐
+       │        │entity_extr. │
+       │        └──────┬──────┘
+       │               │
+       │        ┌──────┴──────┐
+       │        │graph_exec.  │
+       │        └──────┬──────┘
+       │               │
+       └───────┬───────┘
+               ▼
+    ┌──────────────────────┐
+    │ response_synthesizer │  ← UNIC nod de răspuns
+    └──────────┬───────────┘
+               ▼
+              END
+    """
     workflow = StateGraph(MedicalAgentState)
     
+    # Noduri
     workflow.add_node("conversation_analyzer", conversation_analyzer_node)
     workflow.add_node("entity_extractor", entity_extractor_node)
     workflow.add_node("graph_executor", graph_executor_node)
     workflow.add_node("response_synthesizer", response_synthesizer_node)
-    workflow.add_node("off_topic_response", off_topic_response_node)
 
+    # Flow
     workflow.set_entry_point("conversation_analyzer")
+    
     workflow.add_conditional_edges(
         "conversation_analyzer",
         route_after_conversation_analysis,
         {
-            "clarify": "response_synthesizer",      # Ask clarification question
-            "extract_entities": "entity_extractor", # Proceed with extraction
-            "end": "off_topic_response"             # Off-topic response
+            "respond": "response_synthesizer",   # Direct response (no DB needed)
+            "retrieve": "entity_extractor"       # Need to query DB
         }
     )
+    
     workflow.add_edge("entity_extractor", "graph_executor")
     workflow.add_edge("graph_executor", "response_synthesizer")
     workflow.add_edge("response_synthesizer", END)
+    
     return workflow.compile()
 
 
@@ -104,18 +121,22 @@ graph = get_medical_agent()
 
 def run_medical_query(user_message: str, conversation_history: list = None) -> Dict[str, Any]:
     
+    logger.info(f"Running medical query for user message: {user_message}")
+    
     # Create initial state
     initial_state = create_initial_state(
         user_message=user_message,
         conversation_history=conversation_history
     )
+    logger.info(f"Initial state: {initial_state}")
     
     # Get the compiled graph and run
     agent = get_medical_agent()
     
     try:
         result = agent.invoke(initial_state)
-        print_state_debug(result)
+        print_state_execution_path(result)
+        # print_state_debug(result)
         return result
     except Exception as e:
         # Return error state
@@ -128,18 +149,9 @@ def run_medical_query(user_message: str, conversation_history: list = None) -> D
 
 
 def chat(user_message: str, conversation_history: list = None) -> str:
-    """
-    Simple chat interface - returns just the response string.
-    
-    Args:
-        user_message: The user's message
-        conversation_history: Previous messages (optional)
-        
-    Returns:
-        The agent's response as a string
-    """
+
     result = run_medical_query(user_message, conversation_history)
-    return result.get("final_response", "Sorry, I couldn't process your request.")
+    return result.get("final_response")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -147,55 +159,89 @@ def chat(user_message: str, conversation_history: list = None) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class MedicalChatSession:
-    """
-    A conversation session that maintains history across multiple turns.
-    
-    Usage:
-        session = MedicalChatSession()
-        response1 = session.chat("Ce nutrienți depletează Tylenol?")
-        response2 = session.chat("Și ce simptome pot avea?")  # Uses context
-    """
     
     def __init__(self):
         self.history = []
+        self.medications = []
+        self.symptoms = []
+        self.nutrients = []
     
     def chat(self, user_message: str) -> str:
-        """
-        Send a message and get a response, maintaining conversation history.
-        
-        Args:
-            user_message: The user's message
-            
-        Returns:
-            The agent's response
-        """
-        # Run the query with history
-        result = run_medical_query(user_message, self.history)
-        
-        # Update history
-        self.history.append(HumanMessage(content=user_message))
-        response = result.get("final_response", "")
-        self.history.append(AIMessage(content=response))
-        
-        return response
+        """Trimite mesaj și primește răspuns, păstrând contextul complet."""
+        result = self._run_with_persistence(user_message)
+        return result.get("final_response", "")
     
     def get_full_result(self, user_message: str) -> Dict[str, Any]:
+        """Trimite mesaj și primește rezultatul complet cu toate detaliile."""
+        return self._run_with_persistence(user_message)
+    
+    def _run_with_persistence(self, user_message: str) -> Dict[str, Any]:
         """
-        Send a message and get the full result dict (for debugging).
+        Rulează query-ul cu entitățile persistente și actualizează starea.
         """
-        result = run_medical_query(user_message, self.history)
+        # Creează state cu entitățile de la turn-urile anterioare
+        initial_state = create_initial_state(
+            user_message=user_message,
+            conversation_history=self.history,
+            persisted_medications=self.medications,
+            persisted_symptoms=self.symptoms,
+            persisted_nutrients=self.nutrients
+        )
         
-        # Update history
-        self.history.append(HumanMessage(content=user_message))
-        response = result.get("final_response", "")
-        self.history.append(AIMessage(content=response))
+        # Rulează agentul
+        agent = get_medical_agent()
+        try:
+            result = agent.invoke(initial_state)
+            print_state_execution_path(result)
+        except Exception as e:
+            result = {
+                **initial_state,
+                "final_response": f"An error occurred: {str(e)}",
+                "errors": [str(e)],
+                "execution_path": ["error"]
+            }
+        
+        #actualize state(persistent entities from previous turns)
+        
+        analysis = result.get("conversation_analysis")
+        if analysis:
+            # Sincronizează entitățile (LLM poate adăuga sau elimina)
+            if hasattr(analysis, 'accumulated_medications'):
+                self.medications = analysis.accumulated_medications or []
+            if hasattr(analysis, 'accumulated_symptoms'):
+                self.symptoms = analysis.accumulated_symptoms or []
+            if hasattr(analysis, 'accumulated_nutrients'):
+                self.nutrients = analysis.accumulated_nutrients or []
+
+        #actualize history(persistent history from previous turns)
+        result_history = result.get("conversation_history", [])
+        
+        if result_history and len(result_history) > len(self.history):
+            # Folosește history-ul din result (add_messages l-a combinat)
+            self.history = list(result_history)
+        else:
+            # Fallback: adaugă manual (pentru cazuri edge)
+            response = result.get("final_response", "")
+            self.history.append(HumanMessage(content=user_message))
+            self.history.append(AIMessage(content=response))
         
         return result
     
     def clear_history(self):
-        """Clear the conversation history."""
+        """Resetează complet sesiunea."""
         self.history = []
+        self.medications = []
+        self.symptoms = []
+        self.nutrients = []
     
     def get_history(self) -> list:
-        """Get the current conversation history."""
         return self.history
+    
+    def get_context(self) -> Dict[str, Any]:
+        """Returnează contextul curent al conversației."""
+        return {
+            "medications": self.medications,
+            "symptoms": self.symptoms,
+            "nutrients": self.nutrients,
+            "history_length": len(self.history)
+        }
