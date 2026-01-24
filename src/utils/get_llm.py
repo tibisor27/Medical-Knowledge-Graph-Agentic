@@ -1,9 +1,6 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-# HELPER FUNCTIONS
-# ═══════════════════════════════════════════════════════════════════════════════
-
 from langchain_openai import AzureChatOpenAI
-from src.config import AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, OPENAI_API_VERSION, validate_config
+from langchain_openai import AzureOpenAIEmbeddings
+from src.config import  AZURE_DEPLOYMENT_NAME, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, OPENAI_API_VERSION, validate_config, AZURE_EMBEDDINGS_DEPLOYMENT_NAME
 
 def get_llm_5_1_chat() -> AzureChatOpenAI:
     """Get the Azure OpenAI LLM instance."""
@@ -12,7 +9,7 @@ def get_llm_5_1_chat() -> AzureChatOpenAI:
         azure_endpoint=AZURE_OPENAI_ENDPOINT,
         api_key=AZURE_OPENAI_API_KEY,
         api_version=OPENAI_API_VERSION,
-        azure_deployment='gpt-5.1-chat'
+        azure_deployment=AZURE_DEPLOYMENT_NAME
     )
 
 def get_llm_4_1_mini() -> AzureChatOpenAI:
@@ -22,6 +19,15 @@ def get_llm_4_1_mini() -> AzureChatOpenAI:
         azure_endpoint=AZURE_OPENAI_ENDPOINT,
         api_key=AZURE_OPENAI_API_KEY,
         api_version=OPENAI_API_VERSION,
-        azure_deployment='gpt-4.1-mini',
-        temperature=0.0
+        azure_deployment=AZURE_DEPLOYMENT_NAME  
+        )
+
+def get_embeddings_client() -> AzureOpenAIEmbeddings:
+    """Get the Azure OpenAI embeddings client."""
+    validate_config()
+    return AzureOpenAIEmbeddings(
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        api_key=AZURE_OPENAI_API_KEY,
+        api_version=OPENAI_API_VERSION,
+        azure_deployment=AZURE_EMBEDDINGS_DEPLOYMENT_NAME
     )
