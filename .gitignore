@@ -1,3 +1,5 @@
 .env
 __pycache__/
 *.pyc
+.env.docker
+neo4j_full_graph/
