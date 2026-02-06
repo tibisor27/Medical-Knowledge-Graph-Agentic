@@ -1,0 +1,11 @@
+fastapi==0.104.1
+langchain_core==1.2.5
+langchain_openai==1.1.6
+langgraph==1.0.5
+neo4j==6.0.3
+pydantic>= 2.7.4
+python-dotenv==1.2.1
+typing_extensions==4.15.0
+uvicorn==0.24.0
+langfuse==3.11.2
+langchain>=0.1.0
