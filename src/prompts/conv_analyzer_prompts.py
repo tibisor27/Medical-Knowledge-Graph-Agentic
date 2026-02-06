@@ -1,17 +1,3 @@
-"""
-Conversation Analyzer Prompts - Optimized for Natural Dynamic Conversations
-
-This module handles ALL conversation patterns dynamically, without hardcoded flows.
-The analyzer adapts based on:
-1. What we know (context: medications, symptoms, nutrients)
-2. What user wants (intent: ask, confirm, deny, explore)
-3. What we've already done (avoid redundant retrievals)
-"""
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SYSTEM PROMPT - COMPREHENSIVE NATURAL CONVERSATION HANDLING
-# ═══════════════════════════════════════════════════════════════════════════════
-
 CONV_ANALYZER_SYSTEM_PROMPT = """You are an expert Conversation Analyzer for a Medical Knowledge Graph Agent.
 
 Your goal is to extract structured data from NATURAL, DYNAMIC conversations to query a medical database.
