@@ -27,7 +27,13 @@ def medication_lookup(medication: str) -> str:
     WHERE toLower(med.name) CONTAINS toLower($medication)
        OR ANY(syn IN med.synonyms WHERE toLower(syn) CONTAINS toLower($medication))
        OR ANY(brand IN med.brand_names WHERE toLower(brand) CONTAINS toLower($medication))
-    WITH med LIMIT 1
+    WITH med
+    ORDER BY
+        CASE WHEN toLower(med.name) = toLower($medication) THEN 0
+             WHEN toLower(med.name) STARTS WITH toLower($medication) THEN 1
+             ELSE 2 END ASC,
+        size(med.name) ASC
+    LIMIT 1
     
     OPTIONAL MATCH (med)-[:CAUSES]->(de:DepletionEvent)-[:DEPLETES]->(nut:Nutrient)
     OPTIONAL MATCH (de)-[:Has_Symptom]->(sym:Symptom)
