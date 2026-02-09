@@ -1,0 +1,46 @@
+# PASUL 1: Alege imaginea de bază
+# Python 3.11 slim = Python 3.11 cu un sistem minimal (mai mic cu ~500MB)
+FROM python:3.11-slim
+
+# PASUL 2: Setează directorul de lucru în container
+# Toate comenzile următoare se execută în /app
+WORKDIR /app
+
+# PASUL 3: Instalează dependențe sistem (dacă e nevoie)
+# Unele pachete Python necesită tools de compilare
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# PASUL 4: Copiază requirements PRIMUL
+# Docker face caching per layer - dacă requirements nu se schimbă, 
+# nu reinstalează toate pachete (economisește timp!)
+COPY api_requirements.txt .
+
+# PASUL 5: Instalează Python dependencies
+RUN pip install --no-cache-dir -r api_requirements.txt
+
+# PASUL 7: Copiază tot codul aplicației
+# Copiez întregul director src/ și api/
+COPY src/ /app/src/
+COPY api/ /app/api/
+
+# PASUL 8: Copiază .env (opțional, mai bine cu docker-compose)
+# COPY .env /app/.env
+
+# PASUL 9: Expune portul pe care ascultă FastAPI
+# Asta e doar documentație, nu face bind automat
+EXPOSE 8000
+
+# PASUL 10: Setează variabile de mediu (opțional)
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# PASUL 11: Healthcheck (Docker verifică automat dacă API-ul e ok)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/api/health')" || exit 1
+
+# PASUL 12: Comandă de pornire (ENTRY POINT)
+# Aceasta rulează când containerul pornește
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
