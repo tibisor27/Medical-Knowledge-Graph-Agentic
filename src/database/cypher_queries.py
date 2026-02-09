@@ -1,4 +1,7 @@
-PRODUCT_RECOMMENDATION = """
+class CypherQueries:
+    """Predefined Cypher queries for different retrieval types."""
+
+    PRODUCT_RECOMMENDATION = """
     // 1. Primim lista de nutrienți necesari
     WITH $nutrients AS needed_nutrients
     
@@ -265,7 +268,6 @@ PRODUCT_RECOMMENDATION = """
             nutrients_to_recommend: unique_nutrients
         } AS validation
         """
-
 class CypherEntityValidationQueries:
     """Predefined Cypher queries for entity validation."""
     
