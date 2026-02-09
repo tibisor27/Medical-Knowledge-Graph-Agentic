@@ -1,15 +1,90 @@
-version: '3.8'
-
 services:
   neo4j:
     container_name: ${MY_CONTAINER_NAME}
     image: neo4j:5.26.0
     ports:
-      - "${MY_HTTP_PORT}:7474"
-      - "${MY_BOLT_PORT}:7687"
+      - "${MY_HTTP_PORT}:7474"  # Browser UI
+      - "${MY_BOLT_PORT}:7687"  # Bolt protocol
     environment:
       - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_dbms_security_procedures_unrestricted=apoc.*
     volumes:
       - ./${MY_DATA_FOLDER}:/data
+    networks:
+      - medical-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  medical-api:
+    container_name: medical-api
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "${API_PORT:-8000}:8000" 
+    environment:
+      # Azure OpenAI
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - OPENAI_API_VERSION=${OPENAI_API_VERSION}
+      - AZURE_DEPLOYMENT_NAME=${AZURE_DEPLOYMENT_NAME}
+      - AZURE_EMBEDDINGS_DEPLOYMENT_NAME=${AZURE_EMBEDDINGS_DEPLOYMENT_NAME}
+      - EMBEDDING_DEPLOYMENT=${EMBEDDING_DEPLOYMENT}
+      - NEO4J_URI=bolt://host.docker.internal:7688
+      - NEO4J_USER=${NEO4J_USER}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - LLM_READER_USER=${LLM_READER_USER}
+      - LLM_READER_PASSWORD=${LLM_READER_PASSWORD}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL}
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    networks:
+      - medical-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # STREAMLIT UI
+  # ═════════════════════════════════════════════════════════════════════════════
+  medical-ui:
+    container_name: medical-ui
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    ports:
+      - "${UI_PORT:-8501}:8501"  
+    environment:
+      - API_URL=http://medical-api:8000
+    depends_on:
+      medical-api:
+        condition: service_healthy
+    networks:
+      - medical-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NETWORKS
+# ═══════════════════════════════════════════════════════════════════════════════
+networks:
+  medical-network:
+    driver: bridge
+
