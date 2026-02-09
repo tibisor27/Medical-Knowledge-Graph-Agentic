@@ -1,0 +1,59 @@
+# PASUL 1: Imagine de bază
+FROM python:3.11-slim
+
+# PASUL 2: Directorul de lucru
+WORKDIR /app
+
+# PASUL 3: Instalează dependențe sistem
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# PASUL 4: Copiază requirements Streamlit
+COPY streamlit_requirements.txt .
+
+# PASUL 5: Instalează Streamlit dependencies
+RUN pip install --no-cache-dir -r streamlit_requirements.txt
+
+
+# PASUL 7: Copiază codul Streamlit
+COPY streamlit_ui/ /app/streamlit_app/
+
+# PASUL 8: Creează director pentru config Streamlit
+RUN mkdir -p /root/.streamlit
+
+# PASUL 9: Configurare Streamlit
+# Dezactivează telemetry și setează server settings
+RUN echo "\
+[general]\n\
+email = \"\"\n\
+\n\
+[server]\n\
+headless = true\n\
+enableCORS = false\n\
+enableXsrfProtection = false\n\
+port = 8501\n\
+\n\
+[browser]\n\
+gatherUsageStats = false\n\
+" > /root/.streamlit/config.toml
+
+# PASUL 10: Expune portul Streamlit
+EXPOSE 8501
+
+# PASUL 11: Variabile de mediu
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Variabila pentru API URL (setată în docker-compose)
+ENV API_URL=http://fastapi:8000
+
+# PASUL 12: Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl --fail http://localhost:8501/_stcore/health || exit 1
+
+# PASUL 13: Comandă de pornire
+CMD ["streamlit", "run", "streamlit_app/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+
