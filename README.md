@@ -29,7 +29,7 @@ cp .env.example .env
 # Edit .env with your credentials
 
 # 2. Deploy all services
-./deploy.sh
+make deploy
 ```
 
 ## Services
