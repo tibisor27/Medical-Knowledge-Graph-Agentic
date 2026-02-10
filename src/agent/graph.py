@@ -16,16 +16,6 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def route_after_conversation_analysis(state: MedicalAgentState) -> Literal["respond", "retrieve"]:
-    """
-    ROUTING SIMPLU (2 căi):
-    
-    1. RESPOND → response_synthesizer (direct)
-       - NO_RETRIEVAL (greetings, acknowledgments, follow-ups, off-topic)
-       - needs_clarification (întrebări de clarificare)
-    
-    2. RETRIEVE → entity_extractor → graph_executor → response_synthesizer
-       - MEDICATION_LOOKUP, SYMPTOM_INVESTIGATION, CONNECTION_VALIDATION, etc.
-    """
     analysis = state.get("conversation_analysis")
     
     if analysis is None:
@@ -119,48 +109,14 @@ def get_medical_agent():
 graph = get_medical_agent()
 
 
-def run_medical_query(user_message: str, conversation_history: list = None) -> Dict[str, Any]:
-    
-    logger.info(f"Running medical query for user message: {user_message}")
-    
-    # Create initial state
-    initial_state = create_initial_state(
-        user_message=user_message,
-        conversation_history=conversation_history
-    )
-    logger.info(f"Initial state: {initial_state}")
-    
-    # Get the compiled graph and run
-    agent = get_medical_agent()
-    
-    try:
-        result = agent.invoke(initial_state)
-        print_state_execution_path(result)
-        # print_state_debug(result)
-        return result
-    except Exception as e:
-        # Return error state
-        return {
-            **initial_state,
-            "final_response": f"An error occurred: {str(e)}",
-            "errors": [str(e)],
-            "execution_path": ["error"]
-        }
-
-
-def chat(user_message: str, conversation_history: list = None) -> str:
-
-    result = run_medical_query(user_message, conversation_history)
-    return result.get("final_response")
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONVERSATION SESSION CLASS
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class MedicalChatSession:
     
-    def __init__(self):
+    def __init__(self, session_id: str = "default"):
+        self.session_id = session_id
         self.history = []
         self.medications = []
         self.symptoms = []
@@ -193,7 +149,17 @@ class MedicalChatSession:
         try:
             result = agent.invoke(initial_state)
             print_state_execution_path(result)
+            
+            # DEBUG: Log conversation_analysis
+            conv_analysis = result.get("conversation_analysis")
+            logger.debug(f"Result conversation_analysis: {conv_analysis}")
+            if conv_analysis is None:
+                logger.warning("⚠️  conversation_analysis is None after agent.invoke()!")
+                logger.warning(f"    Execution path: {result.get('execution_path', [])}")
+                logger.warning(f"    Errors: {result.get('errors', [])}")
+            
         except Exception as e:
+            logger.error(f"Agent error: {e}", exc_info=True)
             result = {
                 **initial_state,
                 "final_response": f"An error occurred: {str(e)}",
