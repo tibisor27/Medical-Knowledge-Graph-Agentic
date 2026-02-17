@@ -4,12 +4,11 @@ from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 import logging
 from langchain_core.prompts import ChatPromptTemplate
-from src.agent.react_tools import ALL_TOOLS
-from src.prompts.react_agent_prompt import REACT_SYSTEM_PROMPT
+from src.agent.tools import get_tools
+from src.prompts import REACT_SYSTEM_PROMPT
 from src.utils.get_llm import get_llm_4_1_mini
 from src.utils.langfuse_client import get_langfuse_handler, get_prompt_from_langfuse
 from langfuse import observe, propagate_attributes
-from pprint import pprint
 logger = logging.getLogger(__name__)
  
 AGENT_PROMPT = ChatPromptTemplate.from_messages([
@@ -21,26 +20,29 @@ AGENT_PROMPT = ChatPromptTemplate.from_messages([
 # ReAct AGENT FACTORY
 # ═══════════════════════════════════════════════════════════════════════════════
  
-_compiled_agent = None
+_compiled_agent = None  #Getter for singleton ReAct agent instance
  
  
 def create_medical_react_agent():
     """Create ReAct agent with medical tools."""
     llm = get_llm_4_1_mini()
    
+    # Lazy load tools here, not at import time
+    tools = get_tools()
+   
     agent = create_react_agent(
         model=llm,
-        tools=ALL_TOOLS,
+        tools=tools,
     )
    
     return agent
  
  
-def get_medical_agent():
+def get_medical_agent():    #fucntion that initalizes 1 agent globally, so it is created only once and reused across calls
     """Get or create the singleton ReAct agent."""
     global _compiled_agent
     if _compiled_agent is None:
-        _compiled_agent = create_medical_react_agent()
+        _compiled_agent = create_medical_react_agent()  #global variable that holds the agent permanently after first initialization
     return _compiled_agent
  
  
@@ -87,7 +89,7 @@ class MedicalChatSession:
             system_prompt_text = self._get_system_prompt(user_context)
            
             # ═══════════════════════════════════════════════════════════════
-            # 2. BUILD MESSAGES (system + history + new user message)
+            # 2. BUILD MESSAGES (system prompt + conversation history + new user message)
             # ═══════════════════════════════════════════════════════════════
             messages = [SystemMessage(content=system_prompt_text)]
  
@@ -104,7 +106,6 @@ class MedicalChatSession:
             # ═══════════════════════════════════════════════════════════════
             agent = get_medical_agent()
            
-            logger.info(f"[Session {self.session_id}] Invoking ReAct agent")
             logger.info(f"  Context: meds={self.medications}, symptoms={self.symptoms}, nuts={self.nutrients}")
            
             try:
@@ -118,8 +119,7 @@ class MedicalChatSession:
                
                 # Extract the final AI response
                 final_response = self._extract_final_response(result)
-                pprint("=== ReAct Agent Result ===")
-                pprint(result)
+               
                 tool_calls = self._extract_tool_calls(result)
  
                
@@ -129,7 +129,6 @@ class MedicalChatSession:
                 self._update_history(user_message, final_response)
                 self._extract_entities_from_tools(result)
                
-                logger.info(f"[Session {self.session_id}] Response generated successfully")
                 logger.info(f"  Tools called: {[tc['tool'] for tc in tool_calls]}")
                 logger.info(f"  Updated: meds={self.medications}, symptoms={self.symptoms}, nuts={self.nutrients}")
                
@@ -179,22 +178,25 @@ class MedicalChatSession:
         return "\n".join(parts)
    
     def _get_system_prompt(self, user_context: str) -> str:
-        """Get system prompt from Langfuse or fallback to singleton template."""
+        """Get system prompt from Langfuse or fallback to singleton."""
         try:
             langfuse_prompt = get_prompt_from_langfuse("REACT_AGENT")
+           
             if langfuse_prompt:
-                if hasattr(langfuse_prompt, 'format'):
-                    try:
-                        return langfuse_prompt.format(user_context=user_context)
-                    except Exception as format_err:
-                        logger.warning(f"Could not format Langfuse prompt: {format_err}. Using fallback.")
-                # If it's a string, try to format it
-                elif isinstance(langfuse_prompt, str):
-                    return langfuse_prompt.format(user_context=user_context)
+                logger.info(f"Langfuse Prompt Version: {langfuse_prompt.version}")
+               
+                compiled_chat = langfuse_prompt.compile(user_context=user_context)  #LangfusePrompt works with .compile()
+ 
+                for msg in compiled_chat:
+                    if msg['role'] == 'system':
+                        return msg['content']
+                   
+ 
         except Exception as e:
             logger.warning(f"Could not fetch prompt from Langfuse: {str(e)}. Using fallback prompt.")
        
         # Fallback to hardcoded singleton template
+        logger.info("FALLBACK ACTIVATED: Using local AGENT_PROMPT")
         return AGENT_PROMPT.format(user_context=user_context)
        
     # ═══════════════════════════════════════════════════════════════════════════
@@ -237,17 +239,19 @@ class MedicalChatSession:
     # ═══════════════════════════════════════════════════════════════════════════
    
     def _extract_entities_from_tools(self, result: dict):
-        """
-        Post-process tool results to update session memory.
-        When a tool successfully resolves an entity, we remember it.
-        """
+ 
         messages = result.get("messages", [])
        
         for msg in messages:
             if isinstance(msg, AIMessage) and msg.tool_calls:
                 for tc in msg.tool_calls:
-                    tool_name = tc.get("name", "")
-                    args = tc.get("args", {})
+                    if isinstance(tc, dict):
+                        tool_name = tc.get("name", "")
+                        args = tc.get("args", {})
+                    else:  
+                        #ToolCall Class
+                        tool_name = getattr(tc, "name", "")
+                        args = getattr(tc, "args", {})
                    
                     # Track medications
                     if tool_name in ("medication_lookup", "connection_validation"):
@@ -270,8 +274,8 @@ class MedicalChatSession:
                             if nut and nut not in self.nutrients:
                                 self.nutrients.append(nut)
                    
-                    # Track nutrients from nutrient_education
-                    if tool_name == "nutrient_education":
+                    # Track nutrients from nutrient_lookup
+                    if tool_name == "nutrient_lookup":
                         nut = args.get("nutrient", "")
                         if nut and nut not in self.nutrients:
                             self.nutrients.append(nut)
@@ -283,6 +287,11 @@ class MedicalChatSession:
         """Extract nutrient names from medication_lookup tool results."""
         for msg in messages:
             if isinstance(msg, ToolMessage):
+                # Skip empty or non-JSON content
+                if not msg.content or not msg.content.strip():
+                    logger.debug("Skipping empty tool message content")
+                    continue
+                   
                 try:
                     data = json.loads(msg.content)
                     if isinstance(data, list):
@@ -293,8 +302,18 @@ class MedicalChatSession:
                                 nut_name = dep.get("nutrient", "")
                                 if nut_name and nut_name not in self.nutrients:
                                     self.nutrients.append(nut_name)
-                except (json.JSONDecodeError, AttributeError, TypeError):
-                    pass
+                    elif isinstance(data, dict):
+                        # Handle single object response
+                        context = data.get("context", data)
+                        depletions = context.get("depletions", [])
+                        for dep in depletions:
+                            nut_name = dep.get("nutrient", "")
+                            if nut_name and nut_name not in self.nutrients:
+                                self.nutrients.append(nut_name)
+                except json.JSONDecodeError as e:
+                    logger.debug(f"Tool message not JSON (might be plain text): {msg.content[:100] if msg.content else 'empty'}")
+                except (AttributeError, TypeError) as e:
+                    logger.debug(f"Unexpected data structure in tool result: {str(e)}")
    
     # ═══════════════════════════════════════════════════════════════════════════
     # HISTORY MANAGEMENT
