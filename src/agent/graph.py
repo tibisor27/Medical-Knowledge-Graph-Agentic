@@ -265,20 +265,42 @@ class MedicalChatSession:
                         if sym and sym not in self.symptoms:
                             self.symptoms.append(sym)
                    
-                    # Track nutrients from product_recommendation
-                    if tool_name == "product_recommendation":
+                    # Track nutrients from product_recommendation or product_recommendation_flexible
+                    if tool_name in ("product_recommendation", "product_recommendation_flexible"):
                         nuts = args.get("nutrients", [])
                         if isinstance(nuts, str):
                             nuts = [nuts]
                         for nut in nuts:
                             if nut and nut not in self.nutrients:
                                 self.nutrients.append(nut)
+                        # Also track symptoms/medications from flexible tool
+                        syms = args.get("symptoms", [])
+                        if isinstance(syms, str):
+                            syms = [syms]
+                        for s in syms:
+                            if s and s not in self.symptoms:
+                                self.symptoms.append(s)
+                        meds = args.get("medications", [])
+                        if isinstance(meds, str):
+                            meds = [meds]
+                        for m in meds:
+                            if m and m not in self.medications:
+                                self.medications.append(m)
                    
                     # Track nutrients from nutrient_lookup
                     if tool_name == "nutrient_lookup":
                         nut = args.get("nutrient", "")
                         if nut and nut not in self.nutrients:
                             self.nutrients.append(nut)
+                    
+                    # Track product search queries (for context awareness)
+                    if tool_name == "product_search":
+                        query = args.get("query", "")
+                        logger.debug(f"Product search tracked: '{query}'")
+                    
+                    if tool_name == "product_catalog":
+                        category = args.get("category", "")
+                        logger.debug(f"Product catalog browse tracked: '{category}'")
        
         # Also extract nutrients from medication_lookup results
         self._extract_nutrients_from_results(messages)
