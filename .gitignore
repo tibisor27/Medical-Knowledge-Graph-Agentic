@@ -6,3 +6,4 @@ neo4j_full_graph/
 documentation/ARCHITECTURE_COMPARISON.md
 scripts/
 show_tree.py
+data/belife_products.json
