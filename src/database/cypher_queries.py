@@ -1,75 +1,20 @@
 class CypherQueries:
     """Predefined Cypher queries for different retrieval types."""
- 
-    PRODUCT_RECOMMENDATION = """
-    // 1. take the list of needed nutrients from input
-    WITH $nutrients AS needed_nutrients
-   
-    // 2. Find products that contain AT LEAST ONE nutrient from the list
-    MATCH (product:BeLifeProduct)-[r:CONTAINS]->(nut:Nutrient)
-    WHERE nut.name IN needed_nutrients
-   
-    // 3. Group by product - collect matched nutrients with all details
-    WITH product, needed_nutrients,
-         collect(DISTINCT {
-             name: nut.name,
-             amount: r.amount,
-             unit: r.unit
-         }) AS matched_nutrients
-   
-    // 4. Calculate the coverage score
-    WITH product, needed_nutrients, matched_nutrients,
-         size(matched_nutrients) AS nutrients_covered,
-         size(needed_nutrients) AS nutrients_needed
-   
-    // 5. Collect ALL nutrients in the product (for full context in the response, not just the matched ones)
-    OPTIONAL MATCH (product)-[all_r:CONTAINS]->(all_nut:Nutrient)
-    WITH product, needed_nutrients, matched_nutrients, nutrients_covered, nutrients_needed,
-         collect(DISTINCT {
-             name: all_nut.name,
-             amount: all_r.amount,
-             unit: all_r.unit
-         }) AS all_product_nutrients
-   
-    // 6. Order by how many nutrients are covered (best first)
-    ORDER BY nutrients_covered DESC
-   
-    // 7. Return the result with ALL information about the product, coverage, matched nutrients, and other nutrients in the product
-    RETURN {
-        recommended_product: {
-            name: product.name,
-            primary_category: product.primary_category,
-            target_benefit: product.target_benefit,
-            scientific_description: product.scientific_description,
-            dosage_per_day: product.dosage_per_day,
-            dosage_timing: product.dosage_timing,
-            precautions: product.precautions
-        },
-        coverage: {
-            nutrients_covered: nutrients_covered,
-            nutrients_needed: nutrients_needed,
-            coverage_percent: toInteger(toFloat(nutrients_covered) / nutrients_needed * 100)
-        },
-        matched_nutrients: matched_nutrients,
-        other_nutrients_in_product: [n IN all_product_nutrients WHERE NOT n.name IN needed_nutrients][0..5]
-    } AS recommendation
-   
-    LIMIT 1
-"""
- 
+
     PRODUCT_KEYWORD_SEARCH = """
-    // Search for products by keyword in name or description
-    // Used as fallback when nutrient entity resolution fails
-    // (e.g., "Omega-3" not in Nutrient nodes but exists in product names)
-   
+    // Search for products by keyword in name, description, ingredients, or benefit
+    // Searches enriched properties: ingredients_text, ingredient_names, marketing_text
+    
     UNWIND $keywords AS keyword
-   
-    // Case-insensitive search in product name and description
+    
     MATCH (product:BeLifeProduct)
     WHERE toLower(product.name) CONTAINS toLower(keyword)
        OR toLower(product.scientific_description) CONTAINS toLower(keyword)
        OR toLower(product.target_benefit) CONTAINS toLower(keyword)
-   
+       OR toLower(COALESCE(product.ingredients_text, "")) CONTAINS toLower(keyword)
+       OR ANY(ing IN COALESCE(product.ingredient_names, []) WHERE toLower(ing) CONTAINS toLower(keyword))
+       OR toLower(COALESCE(product.marketing_text, "")) CONTAINS toLower(keyword)
+    
     // Collect all nutrients in the product for context
     OPTIONAL MATCH (product)-[r:CONTAINS]->(nut:Nutrient)
     WITH product, keyword,
@@ -78,7 +23,7 @@ class CypherQueries:
              amount: r.amount,
              unit: r.unit
          }) AS all_product_nutrients
-   
+    
     RETURN {
         recommended_product: {
             name: product.name,
@@ -87,15 +32,131 @@ class CypherQueries:
             scientific_description: product.scientific_description,
             dosage_per_day: product.dosage_per_day,
             dosage_timing: product.dosage_timing,
-            precautions: product.precautions
+            precautions: product.precautions,
+            ingredients_summary: product.ingredients_text
         },
         search_method: "keyword_match",
         matched_keyword: keyword,
         all_nutrients_in_product: all_product_nutrients[0..10]
     } AS recommendation
-   
+    
     LIMIT 5
 """
+
+    PRODUCT_FULLTEXT_SEARCH = """
+    // Fulltext search on BeLifeProduct nodes (requires product_full_search index)
+    // Uses scoring for better relevance ranking
+    
+    CALL db.index.fulltext.queryNodes("product_full_search", $search_term)
+    YIELD node AS product, score
+    WHERE score > 0.3
+    
+    // Collect linked nutrients for context
+    OPTIONAL MATCH (product)-[r:CONTAINS]->(nut:Nutrient)
+    WITH product, score,
+         collect(DISTINCT {
+             name: nut.name,
+             amount: r.amount,
+             unit: r.unit
+         }) AS all_product_nutrients
+    
+    ORDER BY score DESC
+    
+    RETURN {
+        recommended_product: {
+            name: product.name,
+            primary_category: product.primary_category,
+            target_benefit: product.target_benefit,
+            scientific_description: product.scientific_description,
+            dosage_per_day: product.dosage_per_day,
+            dosage_timing: product.dosage_timing,
+            precautions: product.precautions,
+            ingredients_summary: product.ingredients_text
+        },
+        search_method: "fulltext",
+        relevance_score: score,
+        all_nutrients_in_product: all_product_nutrients[0..10]
+    } AS recommendation
+    
+    LIMIT 5
+"""
+
+    PRODUCT_VECTOR_SEARCH = """
+    // Semantic product search using embeddings (cross-language)
+    // Returns top-k products by cosine similarity to the query embedding
+    
+    CALL db.index.vector.queryNodes(
+        'product_embeddings', $top_k, $embedding_vector
+    )
+    YIELD node AS product, score
+    
+    RETURN {
+        product: {
+            name: product.name,
+            primary_category: product.primary_category,
+            target_benefit: product.target_benefit,
+            scientific_description: product.scientific_description,
+            dosage_per_day: product.dosage_per_day,
+            dosage_timing: product.dosage_timing,
+            precautions: product.precautions,
+            ingredients_summary: product.ingredients_text,
+            ingredient_names: product.ingredient_names
+        },
+        search_method: "vector_semantic",
+        similarity_score: score
+    } AS recommendation
+    
+    ORDER BY score DESC
+    LIMIT $top_k
+"""
+
+
+
+    PRODUCT_CATALOG = """
+    // Browse products - optionally filtered by category
+    WITH $category AS cat_filter
+    
+    MATCH (product:BeLifeProduct)
+    WHERE cat_filter = "" OR toLower(product.primary_category) CONTAINS toLower(cat_filter)
+       OR toLower(product.target_benefit) CONTAINS toLower(cat_filter)
+    
+    RETURN {
+        product: {
+            name: product.name,
+            primary_category: product.primary_category,
+            target_benefit: product.target_benefit,
+            scientific_description: product.scientific_description,
+            dosage_per_day: product.dosage_per_day,
+            ingredients_summary: product.ingredients_text
+        }
+    } AS catalog_entry
+    
+    ORDER BY product.primary_category, product.name
+    LIMIT 20
+"""
+   
+    PRODUCT_DETAILS = """
+    MATCH (product:BeLifeProduct)
+    WHERE toLower(product.name) = toLower($product_name)
+       OR toLower(product.name) CONTAINS toLower($product_name)
+    
+    RETURN {
+        name: product.name,
+        primary_category: product.primary_category,
+        target_benefit: product.target_benefit,
+        scientific_description: product.scientific_description,
+        dosage_per_day: product.dosage_per_day,
+        dosage_timing: product.dosage_timing,
+        precautions: product.precautions,
+        marketing_claims: product.marketing_claims,
+        ingredients_summary: product.ingredients_text,
+        ingredient_names: product.ingredient_names,
+        interactions: product.interactions_text
+    } AS product_details
+    ORDER BY CASE WHEN toLower(product.name) = toLower($product_name) THEN 0 ELSE 1 END
+    LIMIT 1
+"""
+
    
     MEDICATION_LOOKUP = """
     UNWIND $medications AS med_name
