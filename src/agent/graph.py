@@ -64,6 +64,7 @@ class MedicalChatSession:
         self.medications: list = []
         self.symptoms: list = []
         self.nutrients: list = []
+        self.products: list = []
         self.session_id = session_id
    
     def chat(self, user_message: str) -> str:
@@ -172,6 +173,11 @@ class MedicalChatSession:
             parts.append(f"Nutrients identified as relevant: {', '.join(self.nutrients)}")
         else:
             parts.append("Nutrients: None identified yet")
+            
+        if self.products:
+            parts.append(f"Products discussed/recommended recently: {', '.join(self.products[-5:])}")
+        else:
+            parts.append("Products: None discussed yet")
        
         parts.append(f"Conversation turns so far: {len(self.history) // 2}")
        
@@ -265,27 +271,17 @@ class MedicalChatSession:
                         if sym and sym not in self.symptoms:
                             self.symptoms.append(sym)
                    
-                    # Track nutrients from product_recommendation or product_recommendation_flexible
-                    if tool_name in ("product_recommendation", "product_recommendation_flexible"):
-                        nuts = args.get("nutrients", [])
-                        if isinstance(nuts, str):
-                            nuts = [nuts]
-                        for nut in nuts:
-                            if nut and nut not in self.nutrients:
-                                self.nutrients.append(nut)
-                        # Also track symptoms/medications from flexible tool
-                        syms = args.get("symptoms", [])
-                        if isinstance(syms, str):
-                            syms = [syms]
-                        for s in syms:
-                            if s and s not in self.symptoms:
-                                self.symptoms.append(s)
-                        meds = args.get("medications", [])
-                        if isinstance(meds, str):
-                            meds = [meds]
-                        for m in meds:
-                            if m and m not in self.medications:
-                                self.medications.append(m)
+                    # Track product searches from find_belife_products
+                    if tool_name == "find_belife_products":
+                        query = args.get("query", "")
+                        if query and query not in self.products:
+                            self.products.append(query)
+                    
+                    # Track product details lookups
+                    if tool_name == "product_details":
+                        pname = args.get("product_name", "")
+                        if pname and pname not in self.products:
+                            self.products.append(pname)
                    
                     # Track nutrients from nutrient_lookup
                     if tool_name == "nutrient_lookup":
@@ -301,9 +297,11 @@ class MedicalChatSession:
                     if tool_name == "product_catalog":
                         category = args.get("category", "")
                         logger.debug(f"Product catalog browse tracked: '{category}'")
+
        
         # Also extract nutrients from medication_lookup results
         self._extract_nutrients_from_results(messages)
+        self._extract_products_from_results(messages)
    
     def _extract_nutrients_from_results(self, messages: list):
         """Extract nutrient names from medication_lookup tool results."""
@@ -336,6 +334,36 @@ class MedicalChatSession:
                     logger.debug(f"Tool message not JSON (might be plain text): {msg.content[:100] if msg.content else 'empty'}")
                 except (AttributeError, TypeError) as e:
                     logger.debug(f"Unexpected data structure in tool result: {str(e)}")
+
+    def _extract_products_from_results(self, messages: list):
+        """Extract product names from tool results to track context."""
+        for msg in messages:
+            if isinstance(msg, ToolMessage):
+                if not msg.content or not msg.content.strip():
+                    continue
+                try:
+                    data = json.loads(msg.content)
+                    if isinstance(data, list):
+                        for item in data:
+                            rec = item.get("recommended_product", {})
+                            name = rec.get("name")
+                            if name and name not in self.products:
+                                self.products.append(name)
+                            # Catalog case
+                            product_cat = item.get("product", {})
+                            name_cat = product_cat.get("name")
+                            if name_cat and name_cat not in self.products:
+                                self.products.append(name_cat)
+                    elif isinstance(data, dict):
+                        rec = data.get("recommended_product", {})
+                        name = rec.get("name")
+                        if not name:
+                            # Try product details case
+                            name = data.get("name")
+                        if name and name not in self.products:
+                            self.products.append(name)
+                except Exception:
+                    pass
    
     # ═══════════════════════════════════════════════════════════════════════════
     # HISTORY MANAGEMENT
@@ -356,6 +384,7 @@ class MedicalChatSession:
         self.medications = []
         self.symptoms = []
         self.nutrients = []
+        self.products = []
    
     def get_history(self) -> list:
         return self.history
