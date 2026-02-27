@@ -8,7 +8,7 @@ import logging
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.agent.graph import MedicalChatSession
+from src.agent.graph import MedicalAgent
 from src.config import validate_config
 
 # Configurare logging
@@ -37,12 +37,12 @@ app.add_middleware(
 )
 
 #storage sessions - memory
-sessions: Dict[str, MedicalChatSession] = {}
+sessions: Dict[str, MedicalAgent] = {}
 
 
-def get_or_create_session(session_id: str) -> MedicalChatSession:
+def get_or_create_session(session_id: str) -> MedicalAgent:
     if session_id not in sessions:
-        sessions[session_id] = MedicalChatSession(session_id=session_id)
+        sessions[session_id] = MedicalAgent(session_id=session_id)
         logger.info(f"Created new session: {session_id}")
     return sessions[session_id]
 
