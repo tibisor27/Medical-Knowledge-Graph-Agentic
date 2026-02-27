@@ -1,8 +1,9 @@
 import os
 from dotenv import load_dotenv
 load_dotenv()
- 
-from src.agent.graph import MedicalChatSession
+import logging
+logging.basicConfig(level=logging.INFO)
+from src.agent.session import MedicalAgent
  
  
 def main():
@@ -14,7 +15,7 @@ def main():
     print("Type 'clear' to clear conversation history.")
     print("=" * 70)
    
-    session = MedicalChatSession()
+    session = MedicalAgent()
    
     while True:
         try:
