@@ -1,5 +1,5 @@
 from langchain_core.messages import AIMessage, ToolMessage 
-from src.agent.state import SessionState
+from src.agent.state import ConversationState
 import json
 import logging
 
@@ -30,7 +30,7 @@ def extract_tool_calls(result: dict) -> list[dict]:
     return tool_calls
 
 
-def extract_entities_from_tools(result: dict, state: SessionState) -> None:
+def extract_entities_from_tools(result: dict, state: ConversationState) -> None:
     
     messages = result.get("messages", [])
     
@@ -65,7 +65,7 @@ def extract_entities_from_tools(result: dict, state: SessionState) -> None:
                     logger.debug(f"Product category browse tracked: {category}")
     
 
-def extract_nutrients_from_results(messages: list, state: SessionState) -> None:
+def extract_nutrients_from_results(messages: list, state: ConversationState) -> None:
     for msg in messages:
         if isinstance(msg, ToolMessage):
             if not msg.content or not msg.content.strip():
@@ -94,7 +94,7 @@ def extract_nutrients_from_results(messages: list, state: SessionState) -> None:
                 logger.debug(f"Unexpected data structure in tool result: {str(e)}")
 
 
-def extract_products_from_results(messages: list, state: SessionState) -> None:
+def extract_products_from_results(messages: list, state: ConversationState) -> None:
     for msg in messages:
         if isinstance(msg, ToolMessage):
             if not msg.content or not msg.content.strip():
