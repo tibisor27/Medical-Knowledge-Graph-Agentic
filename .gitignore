@@ -7,3 +7,4 @@ documentation/ARCHITECTURE_COMPARISON.md
 scripts/
 show_tree.py
 data/belife_products.json
+notebooks/neo4j_graph_demo.ipynb
