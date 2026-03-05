@@ -8,8 +8,10 @@ import logging
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.agent.graph import MedicalAgent
+from src.agent.session import MedicalAgent
+from src.multi_agent.graph import build_multi_agent_graph
 from src.config import validate_config
+from langchain_core.messages import HumanMessage, AIMessage
 
 # Configurare logging
 logging.basicConfig(level=logging.INFO)
@@ -36,8 +38,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#storage sessions - memory
+# ═══════════════════════════════════════════════════════════════
+# SESSION MANAGEMENT
+# ═══════════════════════════════════════════════════════════════
+
+# V1 sessions (single ReAct agent)
 sessions: Dict[str, MedicalAgent] = {}
+
+# V2 sessions (multi-agent orchestrator) — persisted state across turns
+v2_sessions: Dict[str, Dict[str, Any]] = {}
+
+# The compiled multi-agent graph (singleton)
+_multi_agent_graph = None
+
+
+def _get_multi_agent_graph():
+    global _multi_agent_graph
+    if _multi_agent_graph is None:
+        _multi_agent_graph = build_multi_agent_graph()
+    return _multi_agent_graph
 
 
 def get_or_create_session(session_id: str) -> MedicalAgent:
@@ -45,6 +64,20 @@ def get_or_create_session(session_id: str) -> MedicalAgent:
         sessions[session_id] = MedicalAgent(session_id=session_id)
         logger.info(f"Created new session: {session_id}")
     return sessions[session_id]
+
+
+def get_or_create_v2_session(session_id: str) -> Dict[str, Any]:
+    """Get or create a V2 multi-agent session with persisted state."""
+    if session_id not in v2_sessions:
+        v2_sessions[session_id] = {
+            "messages": [],
+            "persisted_medications": [],
+            "persisted_symptoms": [],
+            "persisted_nutrients": [],
+            "persisted_products": [],
+        }
+        logger.info(f"Created new V2 session: {session_id}")
+    return v2_sessions[session_id]
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -138,38 +171,17 @@ async def chat(request: ChatRequest):
     try:
         session = get_or_create_session(request.session_id)
         if request.return_details:
-            result = session.get_full_result(request.message)
-            # Serializează conversation_analysis
-            conv_analysis = result.get("conversation_analysis")
-            logger.debug(f"Conversation analysis type: {type(conv_analysis)}")
-            logger.debug(f"Conversation analysis content: {conv_analysis}")
-
-            if conv_analysis:
-                conv_analysis_dict = conv_analysis.dict() if hasattr(conv_analysis, 'dict') else conv_analysis.model_dump()
-            else:
-                conv_analysis_dict = None
+            result = session.run_medical_query(request.message)
             details = {
-                "resolved_entities": [
-                    {
-                        "original_text": e.original_text,
-                        "resolved_name": e.resolved_name,
-                        "node_type": e.node_type,
-                        "match_score": float(e.match_score),
-                        "match_method": e.match_method,
-                    }
-                    for e in result.get("resolved_entities", [])
-                ],
-                "has_results": result.get("has_results", False),
-                "execution_path": result.get("execution_path", []),
-                "conversation_analysis": conv_analysis_dict,
-                "graph_results": result.get("graph_results", []),
+                "tool_calls": result.get("tool_calls", []),
+                "medications": result.get("medications", []),
+                "symptoms": result.get("symptoms", []),
+                "nutrients": result.get("nutrients", []),
+                "products": result.get("products", []),
             }
             response_text = result.get("final_response", "")
-            conv_analysis = result.get("conversation_analysis")
-
         else:
             response_text = session.chat(request.message)
-            
             details = None
         return ChatResponse(
             response=response_text,
@@ -179,6 +191,90 @@ async def chat(request: ChatRequest):
     except Exception as e:
         logger.error(f"Chat error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+# ═══════════════════════════════════════════════════════════════
+# V2 MULTI-AGENT ENDPOINT (Orchestrator Architecture)
+# ═══════════════════════════════════════════════════════════════
+
+@api_router.post("/v2/chat", response_model=ChatResponse)
+async def chat_v2(request: ChatRequest):
+    """
+    Multi-agent chat endpoint using the Yoboo architecture.
+    
+    Flow: InputGateway → Yoboo (ReAct with 7 tools) → Guardrail → Response
+    """
+    try:
+        session_state = get_or_create_v2_session(request.session_id)
+        graph = _get_multi_agent_graph()
+
+        graph_input = {
+            "messages": session_state["messages"] + [HumanMessage(content=request.message)],
+            "session_id": request.session_id,
+            "persisted_medications": session_state["persisted_medications"],
+            "persisted_symptoms": session_state["persisted_symptoms"],
+            "persisted_nutrients": session_state["persisted_nutrients"],
+            "persisted_products": session_state["persisted_products"],
+        }
+
+        result = graph.invoke(graph_input)
+
+        response_text = result.get("final_response", "Sorry, I couldn't process your request.")
+
+        # Persist state for next turn
+        session_state["messages"].append(HumanMessage(content=request.message))
+        session_state["messages"].append(AIMessage(content=response_text))
+        # Keep only last 20 messages to control memory
+        if len(session_state["messages"]) > 20:
+            session_state["messages"] = session_state["messages"][-20:]
+
+        session_state["persisted_medications"] = result.get(
+            "persisted_medications", session_state["persisted_medications"]
+        )
+        session_state["persisted_symptoms"] = result.get(
+            "persisted_symptoms", session_state["persisted_symptoms"]
+        )
+        session_state["persisted_nutrients"] = result.get(
+            "persisted_nutrients", session_state["persisted_nutrients"]
+        )
+        session_state["persisted_products"] = result.get(
+            "persisted_products", session_state["persisted_products"]
+        )
+
+        details = None
+        if request.return_details:
+            details = {
+                "execution_path": result.get("execution_path", []),
+                "safety_flags": result.get("safety_flags", []),
+                "guardrail_pass": result.get("guardrail_pass", True),
+                "persisted_medications": session_state["persisted_medications"],
+                "persisted_symptoms": session_state["persisted_symptoms"],
+                "persisted_nutrients": session_state["persisted_nutrients"],
+                "persisted_products": session_state["persisted_products"],
+            }
+
+        return ChatResponse(
+            response=response_text,
+            session_id=request.session_id,
+            details=details,
+        )
+
+    except Exception as e:
+        logger.error(f"V2 Chat error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.delete("/v2/session/{session_id}")
+async def delete_v2_session(session_id: str):
+    if session_id not in v2_sessions:
+        raise HTTPException(status_code=404, detail=f"V2 Session {session_id} not found")
+    del v2_sessions[session_id]
+    logger.info(f"Deleted V2 session: {session_id}")
+    return {"message": f"V2 Session {session_id} deleted"}
+
+
+# ═══════════════════════════════════════════════════════════════
+# V1 HISTORY/SESSION ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
 
 @api_router.get("/history/{session_id}", response_model=HistoryResponse)
 
