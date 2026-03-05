@@ -31,7 +31,7 @@ class APIClient:
     def chat(self, message: str, return_details: bool = False) -> Dict[str, Any]:
         try:
             response = requests.post(
-                f"{self.base_url}/api/chat",
+                f"{self.base_url}/api/v2/chat",
                 json={
                     "message": message,
                     "session_id": self.session_id,
