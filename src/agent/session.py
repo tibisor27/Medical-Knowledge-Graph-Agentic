@@ -1,7 +1,8 @@
 import logging
 from typing import Dict, Any
 from langchain_core.messages import HumanMessage, SystemMessage
-from langfuse import observe, propagate_attributes
+# from langfuse import observe, propagate_attributes  # TEMP: disabled for testing
+from src.utils.langfuse_client import observe  # STUB
 from src.agent.state import ConversationState
 from src.agent.agent_factory import get_medical_agent
 from src.agent.prompt_builder import PromptBuilder
