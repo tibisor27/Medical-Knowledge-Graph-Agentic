@@ -7,10 +7,11 @@ from pathlib import Path
 import logging
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
+from src.multi_agent.state import log_state_summary
 from src.agent.session import MedicalAgent
 from src.multi_agent.graph import build_multi_agent_graph
 from src.config import validate_config
+from src.utils.langfuse_client import get_langfuse_handler
 from langchain_core.messages import HumanMessage, AIMessage
 
 # Configurare logging
@@ -45,18 +46,15 @@ app.add_middleware(
 # V1 sessions (single ReAct agent)
 sessions: Dict[str, MedicalAgent] = {}
 
-# V2 sessions (multi-agent orchestrator) — persisted state across turns
-v2_sessions: Dict[str, Dict[str, Any]] = {}
-
 # The compiled multi-agent graph (singleton)
-_multi_agent_graph = None
+multi_agent_graph = None
 
 
-def _get_multi_agent_graph():
-    global _multi_agent_graph
-    if _multi_agent_graph is None:
-        _multi_agent_graph = build_multi_agent_graph()
-    return _multi_agent_graph
+def get_multi_agent_graph():
+    global multi_agent_graph
+    if multi_agent_graph is None:
+        multi_agent_graph = build_multi_agent_graph()
+    return multi_agent_graph
 
 
 def get_or_create_session(session_id: str) -> MedicalAgent:
@@ -66,27 +64,10 @@ def get_or_create_session(session_id: str) -> MedicalAgent:
     return sessions[session_id]
 
 
-def get_or_create_v2_session(session_id: str) -> Dict[str, Any]:
-    """Get or create a V2 multi-agent session with persisted state."""
-    if session_id not in v2_sessions:
-        v2_sessions[session_id] = {
-            "messages": [],
-            "persisted_medications": [],
-            "persisted_symptoms": [],
-            "persisted_nutrients": [],
-            "persisted_products": [],
-        }
-        logger.info(f"Created new V2 session: {session_id}")
-    return v2_sessions[session_id]
-
-
-# ═══════════════════════════════════════════════════════════════
-# PYDANTIC MODELS
-# ═══════════════════════════════════════════════════════════════
-
 class ChatRequest(BaseModel):
     message: str = Field(..., description="Mesajul utilizatorului", min_length=1)
     session_id: str = Field(default="default", description="ID-ul sesiunii")
+    user_id: Optional[str] = Field(default=None, description="ID-ul utilizatorului (pentru Langfuse)")
     return_details: bool = Field(default=False, description="Returnează detalii complete (entities, cypher, etc.)")
 
     class Config:
@@ -192,53 +173,39 @@ async def chat(request: ChatRequest):
         logger.error(f"Chat error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-# ═══════════════════════════════════════════════════════════════
-# V2 MULTI-AGENT ENDPOINT (Orchestrator Architecture)
-# ═══════════════════════════════════════════════════════════════
 
 @api_router.post("/v2/chat", response_model=ChatResponse)
 async def chat_v2(request: ChatRequest):
-    """
-    Multi-agent chat endpoint using the Yoboo architecture.
-    
-    Flow: InputGateway → Yoboo (ReAct with 7 tools) → Guardrail → Response
-    """
+
     try:
-        session_state = get_or_create_v2_session(request.session_id)
-        graph = _get_multi_agent_graph()
+        graph = get_multi_agent_graph()
 
-        graph_input = {
-            "messages": session_state["messages"] + [HumanMessage(content=request.message)],
-            "session_id": request.session_id,
-            "persisted_medications": session_state["persisted_medications"],
-            "persisted_symptoms": session_state["persisted_symptoms"],
-            "persisted_nutrients": session_state["persisted_nutrients"],
-            "persisted_products": session_state["persisted_products"],
-        }
-
-        result = graph.invoke(graph_input)
-
-        response_text = result.get("final_response", "Sorry, I couldn't process your request.")
-
-        # Persist state for next turn
-        session_state["messages"].append(HumanMessage(content=request.message))
-        session_state["messages"].append(AIMessage(content=response_text))
-        # Keep only last 20 messages to control memory
-        if len(session_state["messages"]) > 20:
-            session_state["messages"] = session_state["messages"][-20:]
-
-        session_state["persisted_medications"] = result.get(
-            "persisted_medications", session_state["persisted_medications"]
+        # Configurare Checkpointer (thread_id)
+        config = {"configurable": {"thread_id": request.session_id}}
+        
+        # Configurare Langfuse (Observability)
+        langfuse_handler = get_langfuse_handler()
+        if langfuse_handler:
+            # Setam atributele pe handler inainte de a rula graful
+            # Astfel, toate LLM calls din acest thread vor fi grupate sub acelasi session_id
+            if request.session_id:
+                langfuse_handler.session_id = request.session_id
+            if request.user_id:
+                langfuse_handler.user_id = request.user_id
+            
+            # Pasam handler-ul in config-ul Langchain
+            config["callbacks"] = [langfuse_handler]
+        
+        # Invoke graph with just the latest user message
+        result = graph.invoke(
+            {"messages": [HumanMessage(content=request.message)]},
+            config=config
         )
-        session_state["persisted_symptoms"] = result.get(
-            "persisted_symptoms", session_state["persisted_symptoms"]
-        )
-        session_state["persisted_nutrients"] = result.get(
-            "persisted_nutrients", session_state["persisted_nutrients"]
-        )
-        session_state["persisted_products"] = result.get(
-            "persisted_products", session_state["persisted_products"]
-        )
+        
+        response_text = result.get("final_response", "")
+
+        logger.info(f"State after {result.get('step_count')+1} turns: ")
+        log_state_summary(result)
 
         details = None
         if request.return_details:
@@ -246,10 +213,10 @@ async def chat_v2(request: ChatRequest):
                 "execution_path": result.get("execution_path", []),
                 "safety_flags": result.get("safety_flags", []),
                 "guardrail_pass": result.get("guardrail_pass", True),
-                "persisted_medications": session_state["persisted_medications"],
-                "persisted_symptoms": session_state["persisted_symptoms"],
-                "persisted_nutrients": session_state["persisted_nutrients"],
-                "persisted_products": session_state["persisted_products"],
+                "persisted_medications": result.get("persisted_medications", []),
+                "persisted_symptoms": result.get("persisted_symptoms", []),
+                "persisted_nutrients": result.get("persisted_nutrients", []),
+                "persisted_products": result.get("persisted_products", []),
             }
 
         return ChatResponse(
@@ -263,13 +230,6 @@ async def chat_v2(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.delete("/v2/session/{session_id}")
-async def delete_v2_session(session_id: str):
-    if session_id not in v2_sessions:
-        raise HTTPException(status_code=404, detail=f"V2 Session {session_id} not found")
-    del v2_sessions[session_id]
-    logger.info(f"Deleted V2 session: {session_id}")
-    return {"message": f"V2 Session {session_id} deleted"}
 
 
 # ═══════════════════════════════════════════════════════════════
