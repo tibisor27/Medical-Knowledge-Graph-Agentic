@@ -2,7 +2,9 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 import logging
+import json
 logging.basicConfig(level=logging.INFO)
+from src.multi_agent.schemas import SupervisorDecisionOutput
 from src.agent.session import MedicalAgent
  
  
@@ -39,6 +41,8 @@ def main():
            
             # Get response from agent
             print("\nAgent: ", end="")
+            schema = SupervisorDecisionOutput.model_json_schema()
+            print(json.dumps(schema, indent=2))
             response = session.chat(user_input)
             print(response)
            
