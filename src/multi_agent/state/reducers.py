@@ -1,4 +1,4 @@
-def clearable_add(existing_list: list, new_elements: list) -> list:
+def clear_or_add(existing_list: list, new_elements: list) -> list:
 
     if new_elements == ["CLEAR"]:
         return []

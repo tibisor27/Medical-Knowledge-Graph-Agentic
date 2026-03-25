@@ -1,12 +1,13 @@
 """
 Multi-Agent Medical Chatbot — Supervisor + Workers Architecture.
 
-Graph: InputGateway → Supervisor ↔ Workers → SynthesisAgent → Guardrail → END
-
-The Supervisor routes to deterministic workers (zero LLM cost).
-The SynthesisAgent is the only node that generates user-facing text.
+Graph: Supervisor ↔ Workers → SynthesisAgent → Guardrail → END
 """
 
-from src.multi_agent.graph import build_multi_agent_graph
-
 __all__ = ["build_multi_agent_graph"]
+
+
+def build_multi_agent_graph():
+    """Lazy import to avoid triggering all tool imports at package level."""
+    from src.multi_agent.graph import build_multi_agent_graph as _build
+    return _build()

@@ -18,9 +18,10 @@ def log_state_summary(state: dict, title: str = "STATE SUMMARY") -> None:
                 last_msg_type = type(value[-1]).__name__
                 lines.append(f"  {key}: [{len(value)} message(s)] - Last is {last_msg_type}")
                 lines.append(f" Last user message: {value[-1].content}")
-        elif key in ["medical_worker_result", "product_worker_result", "nutrient_worker_result"]:
-            size = len(str(value)) if value else 0
-            lines.append(f"  {key}: [Data Exists - size ~{size} chars]")
+        elif key in ["medical_worker_results", "product_worker_results", "nutrient_worker_results"]:
+            count = len([r for r in value if r and r != "CLEAR"]) if value else 0
+            lines.append(f"  {key}: [{count} result(s)]")
+
             
         elif key == "previous_decisions":
             actions = []
