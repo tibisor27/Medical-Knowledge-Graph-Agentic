@@ -9,7 +9,8 @@ def get_llm_5_1_chat() -> AzureChatOpenAI:
         azure_endpoint=AZURE_OPENAI_ENDPOINT,
         api_key=AZURE_OPENAI_API_KEY,
         api_version=OPENAI_API_VERSION,
-        azure_deployment=AZURE_DEPLOYMENT_NAME
+        azure_deployment=AZURE_DEPLOYMENT_NAME,
+        max_retries=3
     )
 
 def get_llm_4_1_mini() -> AzureChatOpenAI:
@@ -19,7 +20,8 @@ def get_llm_4_1_mini() -> AzureChatOpenAI:
         azure_endpoint=AZURE_OPENAI_ENDPOINT,
         api_key=AZURE_OPENAI_API_KEY,
         api_version=OPENAI_API_VERSION,
-        azure_deployment=AZURE_DEPLOYMENT_NAME  
+        azure_deployment=AZURE_DEPLOYMENT_NAME,
+        max_retries=3  
         )
 
 def get_embeddings_client() -> AzureOpenAIEmbeddings:
