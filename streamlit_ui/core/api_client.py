@@ -28,15 +28,19 @@ class APIClient:
             logger.error(f"Health check failed: {e}")
             return False
     
-    def chat(self, message: str, return_details: bool = False) -> Dict[str, Any]:
+    def chat(self, message: str, return_details: bool = False, user_id: Optional[str] = None) -> Dict[str, Any]:
         try:
+            payload = {
+                "message": message,
+                "session_id": self.session_id,
+                "return_details": return_details
+            }
+            if user_id:
+                payload["user_id"] = user_id
+                
             response = requests.post(
                 f"{self.base_url}/api/v2/chat",
-                json={
-                    "message": message,
-                    "session_id": self.session_id,
-                    "return_details": return_details
-                },
+                json=payload,
                 timeout=self.timeout
             )
             response.raise_for_status() #arunca exceptie daca status code != 200

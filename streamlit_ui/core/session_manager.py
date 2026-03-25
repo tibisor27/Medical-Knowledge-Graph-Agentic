@@ -10,9 +10,13 @@ def initialize_session_state():
     if "messages" not in st.session_state:
         st.session_state.messages = []
     
-    # API client session ID (persistent pentru fiecare utilizator)
+    # API client session ID (persistent pentru fiecare conversatie)
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
+        
+    # User ID simulat (persistent per vizitator browser)
+    if "user_id" not in st.session_state:
+        st.session_state.user_id = f"user_{str(uuid.uuid4())[:8]}"
     
     # API client
     if "api_client" not in st.session_state:

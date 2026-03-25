@@ -29,7 +29,8 @@ def render_chat_interface():
                     # Get response from API
                     api_response = api_client.chat(
                         message=prompt,
-                        return_details=True  # Get full details for display
+                        return_details=True,  # Get full details for display
+                        user_id=st.session_state.get("user_id")
                     )
                     
                     # Extract response and details
