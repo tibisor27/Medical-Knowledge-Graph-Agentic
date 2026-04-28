@@ -1,17 +1,18 @@
 import logging
  
 from src.repositories.entity_repository import BaseRepository
-from src.database.neo4j_client import get_neo4j_client
-from .neo4j_queries import (
+from src.repositories.neo4j_entity_mixin import Neo4jEntityMixin
+from src.infrastructure.neo4j_client import get_neo4j_client
+from src.repositories.neo4j_queries import (
     NUTRIENT_DIRECT_QUERY,
     NUTRIENT_FULLTEXT_QUERY,
     NUTRIENT_LOOKUP
 )
-from src.services.results_formatter import clean_results, is_error
+from src.utils import clean_results, is_error
  
 logger = logging.getLogger(__name__)
  
-class Neo4jNutrientRepository(BaseRepository):
+class Neo4jNutrientRepository(BaseRepository, Neo4jEntityMixin):
     
     def __init__(self):
         self._neo4j = get_neo4j_client()
@@ -39,7 +40,7 @@ class Neo4jNutrientRepository(BaseRepository):
         return self.extract_name(result)
 
     
-    def find_nutrient_metadata(self, canonical_name: str) -> list[dict] | None:
+    def fetch_entity_data(self, canonical_name: str) -> list[dict] | None:
 
         results = self._neo4j.run_safe_query(
             NUTRIENT_LOOKUP,
