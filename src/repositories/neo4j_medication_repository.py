@@ -1,20 +1,21 @@
 import logging
  
 from src.repositories.entity_repository import BaseRepository
-from src.database.neo4j_client import get_neo4j_client
-from .neo4j_queries import (
+from src.repositories.neo4j_entity_mixin import Neo4jEntityMixin
+from src.infrastructure.neo4j_client import get_neo4j_client
+from src.repositories.neo4j_queries import (
     MEDICATION_DIRECT_QUERY,
     MEDICATION_FULLTEXT_QUERY,
     MEDICATION_EMBEDDINGS_QUERY,
     MEDICATION_LOOKUP
 )
-from src.services.embeddings_service import get_embeddings
-from src.services.results_formatter import clean_results, is_error
+from src.infrastructure.embedding_client import get_embeddings
+from src.utils import clean_results, is_error
  
 logger = logging.getLogger(__name__)
  
  
-class Neo4jMedicationRepository(BaseRepository):
+class Neo4jMedicationRepository(BaseRepository, Neo4jEntityMixin):
  
     def __init__(self):
         self._neo4j = get_neo4j_client()
@@ -62,7 +63,7 @@ class Neo4jMedicationRepository(BaseRepository):
         return None
  
  
-    def find_depletions(self, canonical_name: str) -> list[dict]:
+    def fetch_entity_data(self, canonical_name: str) -> list[dict]:
  
         results = self._neo4j.run_safe_query(
             MEDICATION_LOOKUP,
