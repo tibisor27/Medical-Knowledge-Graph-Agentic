@@ -1,9 +1,9 @@
 import logging 
-from src.database.neo4j_client import get_neo4j_client
-from .neo4j_queries import (
+from src.infrastructure.neo4j_client import get_neo4j_client
+from src.repositories.neo4j_queries import (
     MEDICATION_SYMPTOM_CONNECTION
 )
-from src.services.results_formatter import clean_results, is_error
+from src.utils import clean_results, is_error
  
 logger = logging.getLogger(__name__)
  
