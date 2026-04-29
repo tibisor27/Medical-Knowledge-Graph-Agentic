@@ -1,19 +1,20 @@
 import logging
 
 from src.repositories.entity_repository import BaseRepository
-from src.database.neo4j_client import get_neo4j_client
-from .neo4j_queries import (
+from src.repositories.neo4j_entity_mixin import Neo4jEntityMixin
+from src.infrastructure.neo4j_client import get_neo4j_client
+from src.repositories.neo4j_queries import (
     SYMPTOM_INVESTIGATION,
     SYMPTOM_DIRECT_QUERY,
     SYMPTOM_FULLTEXT_QUERY,
     SYMPTOM_EMBEDDINGS_QUERY
 )
-from src.services.embeddings_service import get_embeddings
-from src.services.results_formatter import clean_results, is_error
+from src.infrastructure.embedding_client import get_embeddings
+from src.utils import clean_results, is_error
  
 logger = logging.getLogger(__name__)
 
-class Neo4jSymptomRepository(BaseRepository):
+class Neo4jSymptomRepository(BaseRepository, Neo4jEntityMixin):
 
     def __init__(self):
         self._neo4j = get_neo4j_client()
@@ -64,7 +65,7 @@ class Neo4jSymptomRepository(BaseRepository):
             return None
     
 
-    def find_symptom_causes(self, symptom_name: str) -> list[dict]:
+    def fetch_entity_data(self, symptom_name: str) -> list[dict]:
         results = self._neo4j.run_safe_query(
             SYMPTOM_INVESTIGATION,
             {"symptom": symptom_name}
