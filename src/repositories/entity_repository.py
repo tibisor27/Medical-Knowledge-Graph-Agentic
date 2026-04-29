@@ -5,16 +5,16 @@ class BaseRepository(ABC):
     @abstractmethod
     def resolve(self, user_input: str) -> str | None:
         """
-        Resolv a users's inout ti the canonical enitity name in the graph 
+        Resolve a user's input to the canonical entity name in the graph.
         """
         ...
 
-    @staticmethod
-    def extract_name(result: list) -> str | None:
+
+    @abstractmethod
+    def fetch_entity_data(self, canonical_name: str) -> list[dict] | None:
         """
-        Extract the entity name from a raw neo4j result
+        Retrieve domain data for a resolved entity.
+        Returns None on DB error, empty list if no data found.
         """
-        
-        if result and isinstance(result, list) and len(result) > 0:
-            return result[0].get("name")
-        return None
+        ...
+
