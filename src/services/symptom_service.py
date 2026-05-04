@@ -1,5 +1,6 @@
 import logging
 
+from src.repositories.entity_repository import BaseRepository
 from src.repositories import get_neo4j_symptom_repository
 from src.services.service_results import ServiceResult, ResultStatus
 
@@ -7,8 +8,8 @@ logger = logging.getLogger(__name__)
 
 class SymptomService:
 
-    def __init__(self):
-        self.repo = get_neo4j_symptom_repository()
+    def __init__(self, repo: BaseRepository):
+        self.repo = repo
 
     def get_symptoms_info(self, symptom_name: str) -> ServiceResult:
         canonical_name = self.repo.resolve(symptom_name)
@@ -22,12 +23,12 @@ class SymptomService:
         
         logger.info(f"Symptom '{symptom_name}' resolved to '{canonical_name}'.")
 
-        symptom_data = self.repo.find_symptom_metadata(canonical_name)
+        symptom_data = self.repo.fetch_entity_data(canonical_name)
 
         if symptom_data is None:
             logger.error(f"Database error while fetching symptom metadata for '{canonical_name}'.")
             return ServiceResult(
-                status=ResultStatus.ERROR,
+                status=ResultStatus.DB_ERROR,
                 entity_searched=symptom_name,
                 entity_found=canonical_name
             )
@@ -54,5 +55,6 @@ _symptom_service_instance: SymptomService | None = None
 def get_symptom_service() -> SymptomService:
     global _symptom_service_instance
     if _symptom_service_instance is None:
-        _symptom_service_instance = SymptomService()
+        repo = get_neo4j_symptom_repository()
+        _symptom_service_instance = SymptomService(repo)
     return _symptom_service_instance
