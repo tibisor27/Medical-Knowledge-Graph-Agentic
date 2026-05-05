@@ -1,13 +1,14 @@
 import logging
 
+from src.repositories.entity_repository import BaseRepository
 from src.repositories import get_neo4j_nutrient_repository
 from src.services.service_results import ServiceResult, ResultStatus
 
 logger = logging.getLogger(__name__)
 
 class NutrientService:
-    def __init__(self):
-        self.repo = get_neo4j_nutrient_repository()
+    def __init__(self, repo: BaseRepository):
+        self.repo = repo
 
     def get_nutrient_info(self, nutrient_name: str) -> ServiceResult:
         canonical_name = self.repo.resolve(nutrient_name)
@@ -21,12 +22,12 @@ class NutrientService:
         
         logger.info(f"Nutrient '{nutrient_name}' resolved to '{canonical_name}'.")
             
-        nutrient_data = self.repo.find_nutrient_metadata(canonical_name)
+        nutrient_data = self.repo.fetch_entity_data(canonical_name)
 
         if nutrient_data is None:
             logger.error(f"Database error while fetching nutrient metadata for '{canonical_name}'.")
             return ServiceResult(
-                status=ResultStatus.ERROR,
+                status=ResultStatus.DB_ERROR,
                 entity_searched=nutrient_name,
                 entity_found=canonical_name
             )
@@ -53,6 +54,7 @@ _nutrient_service_instance: NutrientService | None = None
 def get_nutrient_service() -> NutrientService:
     global _nutrient_service_instance
     if _nutrient_service_instance is None:
-        _nutrient_service_instance = NutrientService()
+        repo = get_neo4j_nutrient_repository()
+        _nutrient_service_instance = NutrientService(repo)
     return _nutrient_service_instance
 
